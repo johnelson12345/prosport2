@@ -1,0 +1,59 @@
+plugins {
+    id "com.android.application"
+    // START: FlutterFire Configuration
+    id 'com.google.gms.google-services'
+    // END: FlutterFire Configuration
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "com.example.tabulation_systemv7"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion "27.0.12077973"
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+       jvmTarget = "17"
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.tabulation_systemv7"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdkVersion flutter.minSdkVersion
+        targetSdkVersion flutter.targetSdkVersion
+        versionCode 1
+        versionName "1.0.1"
+
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.debug
+        }
+    }
+      applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def appName = "tabulation"   // <-- Change to your app name
+            def buildTypeName = variant.buildType.name
+            def versionName = variant.versionName
+            def versionCode = variant.versionCode
+
+            // Example format: tabulation-v1.0.1-release.apk
+            outputFileName = "${appName}-v${versionName}-${buildTypeName}.apk"
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

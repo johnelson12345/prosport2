@@ -1,0 +1,43 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "tabulation-systemv7",
+          "appId": "1:135150298843:android:e0e397a2452c811f3f8efe",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "tabulation-systemv7",
+          "configurations": {
+            "android": "1:135150298843:android:e0e397a2452c811f3f8efe",
+            "ios": "1:135150298843:ios:52d4b49e512fb7283f8efe",
+            "macos": "1:135150298843:ios:52d4b49e512fb7283f8efe",
+            "web": "1:135150298843:web:8af7efc6f0b0ea5b3f8efe",
+            "windows": "1:135150298843:web:fc8b2a3d3e53fb4f3f8efe"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "team_schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sportsEventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateTime",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "team_schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tournamentSetupId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateTime",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "team_schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teams",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "tournamentSetupId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "match_schedule",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sportsEventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tournamentSetupId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "match_schedule",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sportsEventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startTime",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

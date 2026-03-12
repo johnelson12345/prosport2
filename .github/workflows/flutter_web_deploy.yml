@@ -1,0 +1,40 @@
+name: Flutter Web Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: 'stable'
+
+    - name: Install dependencies
+      run: flutter pub get
+
+    - name: Build Flutter web
+      run: flutter build web --release
+
+
+    - name: Deploy to Firebase Hosting
+      uses: FirebaseExtended/action-hosting-deploy@v0
+      with:
+        repoToken: \${{ secrets.GITHUB_TOKEN }}
+        firebaseServiceAccount: \${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        channelId: live
+        projectId: tabulation-systemv7
+        target: hosting
+
+# Note:
+# - You need to create a Firebase service account JSON key and add it as a secret named FIREBASE_SERVICE_ACCOUNT in your GitHub repository.
+# - Replace 'your-firebase-project-id' with your actual Firebase project ID.
+# - This workflow triggers on pushes to the main branch and deploys the Flutter web build to Firebase Hosting.

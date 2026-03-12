@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "135150298843",
+    "project_id": "tabulation-systemv7",
+    "storage_bucket": "tabulation-systemv7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:135150298843:android:e0e397a2452c811f3f8efe",
+        "android_client_info": {
+          "package_name": "com.example.tabulation_systemv7"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "135150298843-85q7opg7804btmppq1ui864imp366q15.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-Yaa7AKXAdmDHwH_nFsGfOwS4KZgllc4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "135150298843-85q7opg7804btmppq1ui864imp366q15.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "135150298843-vjpk2i0moidbqco2dnmm1mqv4rjk9b7e.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.tabulationSystemv7"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
