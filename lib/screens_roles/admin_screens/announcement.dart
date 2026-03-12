@@ -199,7 +199,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
-                      ),
+                      ),//try
                     ],
                   ),
                 ),
