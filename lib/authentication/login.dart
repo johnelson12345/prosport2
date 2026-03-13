@@ -58,7 +58,7 @@ class LoginPageState extends State<LoginPage> {
             nextScreen = const ViewerMainScreen();
             break;
           case 'tabulator':
-            nextScreen = const TabulatorScreen();
+            nextScreen = const TabulatorMain();
             break;
           default:
             _showError("Unrecognized user role: $role");
@@ -303,7 +303,7 @@ class LoginPageState extends State<LoginPage> {
                                           nextScreen = const TournamentMain();
                                           break;
                                         case 'tabulator':
-                                          nextScreen = const TabulatorScreen();
+                                          nextScreen = const TabulatorMain();
                                           break;
                                         case 'viewer':
                                         default:

@@ -395,7 +395,7 @@ class SignUpPageState extends State<SignUpPage> {
                                         // nextScreen = TechScreen();
                                         break;
                                       case 'tabulator':
-                                        nextScreen = TabulatorScreen();
+                                        nextScreen = TabulatorMain();
                                         break;
                                       case 'viewer':
                                       default:
