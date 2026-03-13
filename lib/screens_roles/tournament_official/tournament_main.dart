@@ -9,6 +9,7 @@ import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_sched
 import 'package:tabulation_systemv7/screens_roles/admin_screens/admin_dashboard.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/assigned_games.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/score_encoding.dart';
+import 'package:tabulation_systemv7/screens_roles/tournament_official/announcements.dart';
 import 'package:tabulation_systemv7/services/auth.dart';
 import 'package:tabulation_systemv7/services/sports_event_service.dart';
 import 'package:tabulation_systemv7/authentication/login.dart';
@@ -31,6 +32,7 @@ class _TournamentMainState extends State<TournamentMain>
   final TextEditingController _searchController = TextEditingController();
   final List<String> _menuItems = [
     'Dashboard',
+    'Announcements',
     'Assigned Games',
     'Score Encoding',
   ];
@@ -180,6 +182,8 @@ class _TournamentMainState extends State<TournamentMain>
 
   Widget _getScreenWidget() {
     switch (_selectedScreen) {
+      case 'Announcements':
+        return AnnouncementsScreen();
       case 'Assigned Games':
         return const TournamentTeamScheduleManagementScreen();
       case 'Score Encoding':
@@ -197,7 +201,7 @@ class _TournamentMainState extends State<TournamentMain>
       default:
         return const Center(
           child: Text(
-            'Welcome, Admin!',
+            'Welcome, Tournament Official!',
             style: TextStyle(fontSize: 24),
           ),
         );
@@ -609,7 +613,9 @@ class _TournamentMainState extends State<TournamentMain>
                     case 'Score Encoding':
                       iconData = Icons.scoreboard;
                       break;
-
+                    case 'Announcements':
+                      iconData = Icons.announcement;
+                      break;
                     default:
                       iconData = Icons.circle;
                   }
