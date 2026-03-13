@@ -3,19 +3,13 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/sports_eventmngmt_list.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_mngmt_screen.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_scheduling.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/admin_dashboard.dart';
-import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/results_verification.dart';
-import 'package:tabulation_systemv7/screens_roles/tournament_official/assigned_games.dart';
-import 'package:tabulation_systemv7/screens_roles/tournament_official/score_encoding.dart';
+import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/results_mngmt.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/announcements.dart';
 import 'package:tabulation_systemv7/services/auth.dart';
 import 'package:tabulation_systemv7/services/sports_event_service.dart';
 import 'package:tabulation_systemv7/authentication/login.dart';
 import 'package:tabulation_systemv7/widgets/update_notification.dart';
-import 'package:image_picker/image_picker.dart';
 
 //big filedasdasddasda
 class TabulatorMain extends StatefulWidget {
@@ -190,12 +184,7 @@ class _TabulatorMainState extends State<TabulatorMain>
       case 'Reports':
         // return const ScoreEncodingScreen();
 
-      case 'Sports Event Mngmt':
-        return const SportsEventManagementList();
-      case 'Tournament Mngmt':
-        return const TournamentManagementScreen();
-      case 'Scheduling':
-        return const AdminTeamScheduleManagementScreen();
+    
 
       case 'Dashboard':
         return const AdminDashboard();

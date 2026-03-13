@@ -3,7 +3,7 @@ import 'package:tabulation_systemv7/screens_roles/admin_screens/all_tournaments.
 import 'package:tabulation_systemv7/screens_roles/admin_screens/announcement.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_matrix_view.dart';
 import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/reports_analytics.dart';
-import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/results_verification.dart';
+import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/results_mngmt.dart';
 import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/view_rewards.dart';
 import 'package:tabulation_systemv7/screens_roles/viewer/accounts.dart';
 import 'package:tabulation_systemv7/services/tabulator_dashboard_service.dart';
