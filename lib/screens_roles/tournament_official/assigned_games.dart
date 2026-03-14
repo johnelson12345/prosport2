@@ -78,31 +78,77 @@ class _TeamScheduleManagementScreenState
   }
 
   void _loadTournamentData() async {
-    _tournamentService.getTournamentStream().listen((snapshot) {
-      final Map<String, String> names = {};
-      final Map<String, Map<String, dynamic>> details = {};
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        names[data['id']] = data['name'] ?? 'Unnamed Tournament';
-        details[data['id']] = {
-          'docId': doc.id,
-          'name': data['name'] ?? 'Unnamed Tournament',
-          'sportId': data['sportId'] ?? '',
-          'categoryId': data['categoryId'] ?? '',
-          'gender': data['gender'] ?? 'Unknown',
-          'venue': data['venue'] ?? 'Not specified',
-          'eliminationType': data['eliminationType'] ?? 'Single Elimination',
-          'assignedUsers': data['assignedUsers'] ?? [],
-          'status': data['status'] is String ? data['status'] : 'Active',
-          'selectedTeamIds': data['selectedTeamIds'] ?? [], // ADD THIS LINE
-        };
-      }
-      setState(() {
-        _tournamentNames = names;
-        _tournamentDetailsNotifier.value = details;
-      });
+  _tournamentService.getTournamentStream().listen((snapshot) {
+    final Map<String, String> names = {};
+    final Map<String, Map<String, dynamic>> details = {};
+    for (var doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      names[data['id']] = data['name'] ?? 'Unnamed Tournament';
+      details[data['id']] = {
+        'docId': doc.id,
+        'name': data['name'] ?? 'Unnamed Tournament',
+        'sportId': data['sportId'] ?? '',
+        'categoryId': data['categoryId'] ?? '',
+        'gender': data['gender'] ?? 'Unknown',
+        'venue': data['venue'] ?? 'Not specified',
+        'eliminationType': data['eliminationType'] ?? 'Single Elimination',
+        'assignedUsers': data['assignedUsers'] ?? [],
+        'status': data['status'] is String ? data['status'] : 'Active',
+        'selectedTeamIds': data['selectedTeamIds'] ?? [],
+        'isCompleted': data['isCompleted'] ?? false, // ADD THIS LINE
+        'completedAt': data['completedAt'], // ADD THIS LINE
+        'completedBy': data['completedBy'], // ADD THIS LINE
+        'lastUpdated': data['lastUpdated'], // ADD THIS LINE
+      };
+    }
+    setState(() {
+      _tournamentNames = names;
+      _tournamentDetailsNotifier.value = details;
     });
+  });
+}
+// Add this method to force refresh tournament data
+Future<void> _refreshTournamentData() async {
+  print('Refreshing tournament data...');
+  setState(() {
+    // This will trigger a rebuild with existing data
+  });
+  
+  // Force a manual refresh of tournament data
+  try {
+    final snapshot = await _tournamentService.getTournamentStream().first;
+    final Map<String, String> names = {};
+    final Map<String, Map<String, dynamic>> details = {};
+    
+    for (var doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      names[data['id']] = data['name'] ?? 'Unnamed Tournament';
+      details[data['id']] = {
+        'docId': doc.id,
+        'name': data['name'] ?? 'Unnamed Tournament',
+        'sportId': data['sportId'] ?? '',
+        'categoryId': data['categoryId'] ?? '',
+        'gender': data['gender'] ?? 'Unknown',
+        'venue': data['venue'] ?? 'Not specified',
+        'eliminationType': data['eliminationType'] ?? 'Single Elimination',
+        'assignedUsers': data['assignedUsers'] ?? [],
+        'status': data['status'] is String ? data['status'] : 'Active',
+        'selectedTeamIds': data['selectedTeamIds'] ?? [],
+        'isCompleted': data['isCompleted'] ?? false,
+        'completedAt': data['completedAt'],
+        'completedBy': data['completedBy'],
+        'lastUpdated': data['lastUpdated'],
+      };
+    }
+    
+    setState(() {
+      _tournamentNames = names;
+      _tournamentDetailsNotifier.value = details;
+    });
+  } catch (e) {
+    print('Error refreshing tournament data: $e');
   }
+}
 
   // SIMPLIFIED EDIT MATCH DIALOG with working loading indicator
   Future<void> _showEditMatchDialog(
@@ -1599,139 +1645,137 @@ class _TeamScheduleManagementScreenState
                   ),
 
                   // Grid content
-                  Expanded(
-                    child: paginatedEntries.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.search_off,
-                                    size: 64, color: Colors.grey.shade400),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No tournaments match your filters',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                                if (_searchQuery.isNotEmpty ||
-                                    _selectedDate != null)
-                                  TextButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        _searchQuery = "";
-                                        _selectedDate = null;
-                                        _currentPage = 0;
-                                      });
-                                    },
-                                    child: const Text('Clear filters'),
-                                  ),
-                              ],
-                            ),
-                          )
-                        : GridView.builder(
-                            padding: const EdgeInsets.all(16),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 0.75,
-                            ),
-                            itemCount: paginatedEntries.length,
-                            itemBuilder: (context, index) {
-                              final entry = paginatedEntries[index];
-                              final tournamentId = entry.key;
-                              final schedules = entry.value;
-                              final tournamentName =
-                                  _tournamentNames[tournamentId] ??
-                                      tournamentId;
+                  // In the build method, find where you have the GridView and fix the RefreshIndicator:
 
-                              final organizedMatches =
-                                  _organizeMatchesInBracketFormat(schedules);
+Expanded(
+  child: paginatedEntries.isEmpty
+      ? Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.search_off,
+                  size: 64, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text(
+                'No tournaments match your filters',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              if (_searchQuery.isNotEmpty ||
+                  _selectedDate != null)
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _searchQuery = "";
+                      _selectedDate = null;
+                      _currentPage = 0;
+                    });
+                  },
+                  child: const Text('Clear filters'),
+                ),
+            ],
+          ),
+        )
+      : RefreshIndicator(
+          onRefresh: _refreshTournamentData,
+          child: GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 0.75,
+            ),
+            itemCount: paginatedEntries.length,
+            itemBuilder: (context, index) {
+              final entry = paginatedEntries[index];
+              final tournamentId = entry.key;
+              final schedules = entry.value;
+              final tournamentName =
+                  _tournamentNames[tournamentId] ?? tournamentId;
 
-                              final sportName = schedules.isNotEmpty
-                                  ? schedules.first['sport'] ??
-                                      schedules.first['sportName'] ??
-                                      'Unknown Sport'
-                                  : 'Unknown Sport';
-                              final categoryName = schedules.isNotEmpty
-                                  ? schedules.first['category'] ??
-                                      schedules.first['categoryName'] ??
-                                      'Unknown Category'
-                                  : 'Unknown Category';
+              final organizedMatches =
+                  _organizeMatchesInBracketFormat(schedules);
 
-                              final sportIcon = _getSportIcon(sportName);
-                              final categoryColor =
-                                  _getCategoryColor(categoryName);
+              final sportName = schedules.isNotEmpty
+                  ? schedules.first['sport'] ??
+                      schedules.first['sportName'] ??
+                      'Unknown Sport'
+                  : 'Unknown Sport';
+              final categoryName = schedules.isNotEmpty
+                  ? schedules.first['category'] ??
+                      schedules.first['categoryName'] ??
+                      'Unknown Category'
+                  : 'Unknown Category';
 
-                              // Calculate bracket info
-                              final teamCount = _extractTeamCount(schedules);
-                              final bracketInfo =
-                                  _getBracketInfo(teamCount, schedules.length);
+              final sportIcon = _getSportIcon(sportName);
+              final categoryColor = _getCategoryColor(categoryName);
 
-                              return _BracketStyleTournamentCard(
-                                tournamentId: tournamentId,
-                                tournamentName: tournamentName,
-                                sportIcon: sportIcon,
-                                sportName: sportName,
-                                categoryName: categoryName,
-                                categoryColor: categoryColor,
-                                schedules: organizedMatches,
-                                originalSchedules: schedules,
-                                tournamentDetails: _tournamentDetailsNotifier
-                                    .value[tournamentId],
-                                teamCount: teamCount,
-                                bracketInfo: bracketInfo,
-                                onEditVenue: () => _editVenue(tournamentId),
-                                onEditStatus: () => _editStatus(tournamentId),
-                                onDeleteAll: () =>
-                                    _deleteAllTournamentData(tournamentId),
-                                onAddMatch: () async {
-                                  await _showAddMatchDialog(tournamentId);
-                                },
-                                onEditMatch: (item) =>
-                                    _showEditMatchDialog(tournamentId, item),
-                                onDeleteMatch: (item) async {
-                                  final confirmed = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text('Confirm Delete'),
-                                      content: const Text(
-                                          'Are you sure you want to delete this schedule?'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, false),
-                                          child: const Text('Cancel'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, true),
-                                          child: const Text('Delete'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirmed == true) {
-                                    _deleteTeamSchedule(item['id']);
-                                  }
-                                },
-                                onShowBracket: () {
-                                  TournamentOfficialBracketDialog.show(
-                                    context: context,
-                                    tournamentId: tournamentId,
-                                    tournamentName: tournamentName,
-                                  );
-                                },
-                                formatDateTime: _formatDateTime,
-                                formatEndDateTime: _formatEndDateTime,
-                                getUserNamesString: _getUserNamesString,
-                              );
-                            },
-                          ),
-                  ),
+              // Calculate bracket info
+              final teamCount = _extractTeamCount(schedules);
+              final bracketInfo =
+                  _getBracketInfo(teamCount, schedules.length);
+
+              return _BracketStyleTournamentCard(
+                tournamentId: tournamentId,
+                tournamentName: tournamentName,
+                sportIcon: sportIcon,
+                sportName: sportName,
+                categoryName: categoryName,
+                categoryColor: categoryColor,
+                schedules: organizedMatches,
+                originalSchedules: schedules,
+                tournamentDetails: _tournamentDetailsNotifier.value[tournamentId],
+                teamCount: teamCount,
+                bracketInfo: bracketInfo,
+                onEditVenue: () => _editVenue(tournamentId),
+                onEditStatus: () => _editStatus(tournamentId),
+                onDeleteAll: () => _deleteAllTournamentData(tournamentId),
+                onAddMatch: () async {
+                  await _showAddMatchDialog(tournamentId);
+                },
+                onEditMatch: (item) => _showEditMatchDialog(tournamentId, item),
+                onDeleteMatch: (item) async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Confirm Delete'),
+                      content: const Text(
+                          'Are you sure you want to delete this schedule?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    _deleteTeamSchedule(item['id']);
+                  }
+                },
+                onShowBracket: () {
+                  TournamentOfficialBracketDialog.show(
+                    context: context,
+                    tournamentId: tournamentId,
+                    tournamentName: tournamentName,
+                  );
+                },
+                formatDateTime: _formatDateTime,
+                formatEndDateTime: _formatEndDateTime,
+                getUserNamesString: _getUserNamesString,
+                onRefresh: _refreshTournamentData, // Pass the refresh function
+              );
+            },
+          ),
+        ),
+),
 
                   // Bottom pagination (optional - you can remove if not needed)
                   if (totalPages > 1)
@@ -2506,13 +2550,14 @@ class _BracketStyleTournamentCard extends StatelessWidget {
   final VoidCallback onEditVenue;
   final VoidCallback onEditStatus;
   final VoidCallback onDeleteAll;
-  final Future<void> Function() onAddMatch; // Change from VoidCallback to this
+  final Future<void> Function() onAddMatch;
   final Function(Map<String, dynamic>) onEditMatch;
   final Function(Map<String, dynamic>) onDeleteMatch;
   final VoidCallback onShowBracket;
   final String Function(String) formatDateTime;
   final String Function(String?) formatEndDateTime;
   final String Function(List<dynamic>?) getUserNamesString;
+  final VoidCallback onRefresh;
 
   const _BracketStyleTournamentCard({
     required this.tournamentId,
@@ -2536,13 +2581,25 @@ class _BracketStyleTournamentCard extends StatelessWidget {
     required this.formatDateTime,
     required this.formatEndDateTime,
     required this.getUserNamesString,
+    required this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
     final isActive = tournamentDetails?['status'] == 'Active';
+    final isCompleted = tournamentDetails?['isCompleted'] == true;
     final venue = tournamentDetails?['venue'] ?? 'Not specified';
     final assignedUsers = tournamentDetails?['assignedUsers'] as List<dynamic>?;
+    
+    // Calculate completion stats
+    final totalMatches = originalSchedules.length;
+    final matchesWithScores = originalSchedules.where((m) {
+      final scores = m['scores'] as Map<String, dynamic>?;
+      return scores != null && scores.isNotEmpty;
+    }).length;
+    final completionPercentage = totalMatches > 0 
+        ? (matchesWithScores / totalMatches * 100).toInt() 
+        : 0;
 
     return Card(
       elevation: 4,
@@ -2553,7 +2610,10 @@ class _BracketStyleTournamentCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isActive ? Colors.green.shade200 : Colors.grey.shade200,
+            color: isCompleted 
+                ? Colors.green.shade300 
+                : (isActive ? Colors.green.shade200 : Colors.grey.shade200),
+            width: isCompleted ? 2 : 1,
           ),
         ),
         child: SingleChildScrollView(
@@ -2562,42 +2622,136 @@ class _BracketStyleTournamentCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // Header with completion status prominently displayed
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isActive ? Colors.green.shade50 : Colors.grey.shade50,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isCompleted
+                        ? [Colors.green.shade100, Colors.green.shade50]
+                        : (isActive
+                            ? [Colors.green.shade50, Colors.green.shade100]
+                            : [Colors.grey.shade100, Colors.grey.shade50]),
+                  ),
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(16),
                   ),
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child:
-                          Text(sportIcon, style: const TextStyle(fontSize: 24)),
+                    // Sport Icon with completion indicator
+                    Stack(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isCompleted 
+                                  ? Colors.green.shade300 
+                                  : Colors.grey.shade200,
+                              width: 2,
+                            ),
+                          ),
+                          child: Text(
+                            sportIcon, 
+                            style: const TextStyle(fontSize: 24)
+                          ),
+                        ),
+                        // Completion badge on icon
+                        if (isCompleted)
+                          Positioned(
+                            top: -2,
+                            right: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.check,
+                                size: 10,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
+                    
                     const SizedBox(width: 12),
+                    
+                    // Tournament Info
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            tournamentName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  tournamentName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    decoration: isCompleted 
+                                        ? TextDecoration.lineThrough 
+                                        : null,
+                                    decorationColor: Colors.green.shade400,
+                                    color: isCompleted 
+                                        ? Colors.green.shade700 
+                                        : Colors.black87,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              // Completion status badge
+                              if (isCompleted)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, 
+                                    vertical: 2
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: 10,
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(width: 2),
+                                      Text(
+                                        'COMPLETED',
+                                        style: TextStyle(
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
+                          
                           const SizedBox(height: 4),
+                          
+                          // Sport and Category row
                           Row(
                             children: [
                               Container(
@@ -2636,39 +2790,64 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? Colors.green.shade100
-                            : Colors.red.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isActive ? Colors.green : Colors.red,
-                            ),
+                    
+                    // Status and Completion Button
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // Active/Inactive status
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? Colors.green.shade100
+                                : Colors.red.shade100,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            tournamentDetails?['status'] ?? 'Active',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: isActive
-                                  ? Colors.green.shade700
-                                  : Colors.red.shade700,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isActive ? Colors.green : Colors.red,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                tournamentDetails?['status'] ?? 'Active',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isActive
+                                      ? Colors.green.shade700
+                                      : Colors.red.shade700,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                        
+                        const SizedBox(height: 4),
+                        
+                        // Completion Button
+                        _TournamentCompletionButton(
+                          tournamentId: tournamentId,
+                          tournamentDetails: tournamentDetails,
+                          matches: originalSchedules,
+                          onStatusChanged: () {
+    // Call the refresh function when status changes
+                                  if (onRefresh != null) {
+                                    onRefresh!();
+                                  }
+                                },
+                                onRefresh: onRefresh, // Pass the refresh function
+                              ),
+                        
+                      ],
                     ),
                   ],
                 ),
@@ -2680,6 +2859,61 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Progress Bar (shows completion visually)
+                    if (totalMatches > 0) ...[
+                      Container(
+                        height: 4,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          color: Colors.grey.shade200,
+                        ),
+                        child: FractionallySizedBox(
+                          widthFactor: completionPercentage / 100,
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(2),
+                              gradient: LinearGradient(
+                                colors: isCompleted
+                                    ? [Colors.green, Colors.green.shade300]
+                                    : [Colors.blue, Colors.lightBlue.shade300],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      
+                      // Progress text
+                      Row(
+                        children: [
+                          Icon(
+                            isCompleted 
+                                ? Icons.check_circle 
+                                : Icons.pending,
+                            size: 12,
+                            color: isCompleted 
+                                ? Colors.green 
+                                : Colors.blue,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isCompleted
+                                ? 'All matches completed'
+                                : '$matchesWithScores/$totalMatches matches have scores ($completionPercentage%)',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: isCompleted 
+                                  ? Colors.green.shade700 
+                                  : Colors.blue.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    
                     // Info Row
                     Row(
                       children: [
@@ -2694,7 +2928,7 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         _InfoChip(
                           icon: Icons.sports_soccer,
-                          label: '${originalSchedules.length} matches',
+                          label: '$totalMatches matches',
                           color: Colors.orange,
                         ),
                       ],
@@ -2706,22 +2940,35 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.deepOrange.shade50,
+                        color: isCompleted
+                            ? Colors.green.shade50
+                            : Colors.deepOrange.shade50,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.deepOrange.shade200),
+                        border: Border.all(
+                          color: isCompleted
+                              ? Colors.green.shade200
+                              : Colors.deepOrange.shade200,
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.account_tree,
-                              size: 14, color: Colors.deepOrange.shade700),
+                          Icon(
+                            Icons.account_tree,
+                            size: 14,
+                            color: isCompleted
+                                ? Colors.green.shade700
+                                : Colors.deepOrange.shade700,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              bracketInfo,
+                              isCompleted ? 'Tournament Completed' : bracketInfo,
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w500,
-                                color: Colors.deepOrange.shade700,
+                                color: isCompleted
+                                    ? Colors.green.shade700
+                                    : Colors.deepOrange.shade700,
                               ),
                             ),
                           ),
@@ -2737,7 +2984,9 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.deepOrange.shade700,
+                                color: isCompleted
+                                    ? Colors.green.shade700
+                                    : Colors.deepOrange.shade700,
                               ),
                             ),
                           ),
@@ -2780,114 +3029,50 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                     // Action Buttons
                     Row(
                       children: [
-                        // Expanded(
-                        //     // child: _ActionButton(
-                        //     //   onPressed: () async {
-                        //     //     // Create a completer to track when dialog is ready
-                        //     //     final dialogCompleter = Completer<void>();
-
-                        //     //     // Show loading indicator with Future that will complete when dialog is ready
-                        //     //     showDialog(
-                        //     //       context: context,
-                        //     //       barrierDismissible: false,
-                        //     //       builder: (context) {
-                        //     //         return FutureBuilder<void>(
-                        //     //           future: dialogCompleter.future,
-                        //     //           builder: (context, snapshot) {
-                        //     //             return Center(
-                        //     //               child: Container(
-                        //     //                 padding: const EdgeInsets.all(24),
-                        //     //                 decoration: BoxDecoration(
-                        //     //                   color: Colors.white,
-                        //     //                   borderRadius:
-                        //     //                       BorderRadius.circular(16),
-                        //     //                 ),
-                        //     //                 child: Column(
-                        //     //                   mainAxisSize: MainAxisSize.min,
-                        //     //                   children: [
-                        //     //                     const CircularProgressIndicator(),
-                        //     //                     const SizedBox(height: 16),
-                        //     //                     Text(
-                        //     //                       snapshot.connectionState ==
-                        //     //                               ConnectionState.waiting
-                        //     //                           ? 'Loading match dialog...'
-                        //     //                           : 'Ready!',
-                        //     //                       style: const TextStyle(
-                        //     //                         fontSize: 14,
-                        //     //                         fontWeight: FontWeight.w500,
-                        //     //                       ),
-                        //     //                     ),
-                        //     //                   ],
-                        //     //                 ),
-                        //     //               ),
-                        //     //             );
-                        //     //           },
-                        //     //         );
-                        //     //       },
-                        //     //     );
-
-                        //     //     // Small delay to ensure dialog is shown
-                        //     //     await Future.delayed(
-                        //     //         const Duration(milliseconds: 100));
-
-                        //     //     // Now actually load the add match dialog
-                        //     //     // This will wait for the dialog to be fully ready
-                        //     //     await onAddMatch();
-
-                        //     //     // Complete the future to close the loading dialog
-                        //     //     if (!dialogCompleter.isCompleted) {
-                        //     //       dialogCompleter.complete();
-                        //     //     }
-
-                        //     //     // Small delay to show the "Ready!" message
-                        //     //     await Future.delayed(
-                        //     //         const Duration(milliseconds: 300));
-
-                        //     //     // Close loading dialog
-                        //     //     if (context.mounted) {
-                        //     //       Navigator.pop(context);
-                        //     //     }
-                        //     //   },
-                        //     //   icon: Icons.add,
-                        //     //   label: 'Match',
-                        //     //   color: Colors.blue,
-                        //     // ),
-                        //     ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: _ActionButton(
                             onPressed: onShowBracket,
                             icon: Icons.account_tree,
                             label: 'Bracket',
-                            color: Colors.green,
+                            color: isCompleted ? Colors.green : Colors.green,
                           ),
                         ),
-                        // const SizedBox(width: 4),
-                        // _IconButton(
-                        //   onPressed: onEditStatus,
-                        //   icon: Icons.edit,
-                        //   color: Colors.orange,
-                        //   tooltip: 'Edit Status',
-                        // ),
-                        // _IconButton(
-                        //   onPressed: onDeleteAll,
-                        //   icon: Icons.delete,
-                        //   color: Colors.red,
-                        //   tooltip: 'Delete All',
-                        // ),
                       ],
                     ),
 
                     const SizedBox(height: 8),
 
                     // MATCHES GRID
-                    const Text(
-                      'MATCHES',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'MATCHES',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        if (isCompleted)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              '✓ All completed',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
 
                     const SizedBox(height: 4),
@@ -2913,7 +3098,10 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                               ],
                             ),
                           )
-                        : _buildCompactMatchesGrid(),
+                        : Opacity(
+                            opacity: isCompleted ? 0.7 : 1.0,
+                            child: _buildCompactMatchesGrid(),
+                          ),
                   ],
                 ),
               ),
@@ -3596,6 +3784,255 @@ class _InfoChip extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+class _TournamentCompletionButton extends StatefulWidget {
+  final String tournamentId;
+  final Map<String, dynamic>? tournamentDetails;
+  final List<Map<String, dynamic>> matches;
+  final VoidCallback onStatusChanged;
+  final Function? onRefresh; // ADD THIS
+
+  const _TournamentCompletionButton({
+    required this.tournamentId,
+    required this.tournamentDetails,
+    required this.matches,
+    required this.onStatusChanged,
+    this.onRefresh, // ADD THIS
+  });
+
+  @override
+  __TournamentCompletionButtonState createState() => __TournamentCompletionButtonState();
+}
+
+class __TournamentCompletionButtonState extends State<_TournamentCompletionButton> {
+  final TournamentService _tournamentService = TournamentService();
+  bool _isLoading = false;
+  bool _isCompleted = false;
+  int _matchesWithScores = 0;
+  bool _checkingScores = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _isCompleted = widget.tournamentDetails?['isCompleted'] == true;
+    _checkScoresProgress();
+  }
+
+  @override
+  void didUpdateWidget(_TournamentCompletionButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update state if tournament details changed
+    if (widget.tournamentDetails != oldWidget.tournamentDetails) {
+      setState(() {
+        _isCompleted = widget.tournamentDetails?['isCompleted'] == true;
+      });
+    }
+  }
+
+  Future<void> _checkScoresProgress() async {
+    setState(() => _checkingScores = true);
+    
+    try {
+      // Count matches with scores
+      int count = 0;
+      for (var match in widget.matches) {
+        final scores = match['scores'] as Map<String, dynamic>?;
+        if (scores != null && scores.isNotEmpty) {
+          count++;
+        } else if (match['winner'] != null) {
+          count++; // Consider matches with winner as having scores
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _matchesWithScores = count;
+          _checkingScores = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _checkingScores = false);
+    }
+  }
+
+  Future<void> _toggleCompletion() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final allHaveScores = await _tournamentService.doAllMatchesHaveScores(
+        widget.tournamentId
+      );
+      
+      if (!allHaveScores && !_isCompleted) {
+        _showStatusMessage(
+          '⚠️ ${_matchesWithScores}/${widget.matches.length} matches have scores',
+          Colors.orange,
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final newStatus = !_isCompleted;
+      await _tournamentService.markTournamentAsCompleted(
+        widget.tournamentId, newStatus
+      );
+
+      setState(() {
+        _isCompleted = newStatus;
+        _isLoading = false;
+      });
+      
+      // Call both callbacks
+      widget.onStatusChanged();
+      if (widget.onRefresh != null) {
+        widget.onRefresh!();
+      }
+      
+      _showStatusMessage(
+        newStatus ? '✅ Tournament completed!' : '📋 Tournament marked incomplete',
+        newStatus ? Colors.green : Colors.orange,
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showStatusMessage('❌ Error: $e', Colors.red);
+    }
+  }
+
+  void _showStatusMessage(String message, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMatches = widget.matches.length;
+    final progress = totalMatches > 0 ? _matchesWithScores / totalMatches : 0.0;
+    final canComplete = _matchesWithScores == totalMatches && totalMatches > 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: _isCompleted 
+              ? [Colors.green.shade100, Colors.green.shade50]
+              : (canComplete 
+                  ? [Colors.blue.shade100, Colors.blue.shade50]
+                  : [Colors.grey.shade200, Colors.grey.shade100]),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _toggleCompletion,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Progress indicator ring
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Stack(
+                    children: [
+                      // Background circle
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _isCompleted 
+                                ? Colors.green.shade200
+                                : (canComplete 
+                                    ? Colors.blue.shade200 
+                                    : Colors.grey.shade300),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      // Progress arc or checkmark
+                      if (_isCompleted)
+                        const Center(
+                          child: Icon(
+                            Icons.check,
+                            size: 16,
+                            color: Colors.green,
+                          ),
+                        )
+                      else if (!_checkingScores && totalMatches > 0)
+                        Center(
+                          child: Text(
+                            '${(progress * 100).toInt()}%',
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: canComplete ? Colors.blue : Colors.grey,
+                            ),
+                          ),
+                        ),
+                      // Loading indicator
+                      if (_isLoading || _checkingScores)
+                        const Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Status text
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _isCompleted 
+                          ? 'Completed' 
+                          : (canComplete ? 'Ready to Complete' : 'In Progress'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _isCompleted 
+                            ? Colors.green.shade700
+                            : (canComplete 
+                                ? Colors.blue.shade700 
+                                : Colors.grey.shade600),
+                      ),
+                    ),
+                    if (!_isCompleted && totalMatches > 0)
+                      Text(
+                        '$_matchesWithScores/$totalMatches matches',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: canComplete 
+                              ? Colors.blue.shade400 
+                              : Colors.grey.shade500,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
