@@ -21,7 +21,17 @@ class TournamentService {
       throw Exception('Error adding tournament: $e');
     }
   }
-
+ Future<void> updateTournamentStatus(String docId, String status) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('tournaments')
+          .doc(docId)
+          .update({'status': status});
+    } catch (e) {
+      print('Error updating tournament status: $e');
+      rethrow;
+    }
+  }
   // Read Tournaments (Stream for Real-Time Updates)
   Stream<QuerySnapshot> getTournamentStream() async* {
     String? activeEventId = await _sportsEventService.getActiveSportsEventId();

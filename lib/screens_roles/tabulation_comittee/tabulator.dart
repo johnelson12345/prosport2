@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/admin_dashboard.dart';
 import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/results_mngmt.dart';
+import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/tabulator_medal_tally.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/announcements.dart';
 import 'package:tabulation_systemv7/services/auth.dart';
 import 'package:tabulation_systemv7/services/sports_event_service.dart';
@@ -182,12 +183,12 @@ class _TabulatorMainState extends State<TabulatorMain>
       case 'Results Mngmt':
         return const ResultsVerification();
       case 'Reports':
-        // return const ScoreEncodingScreen();
 
-    
+      case 'Medal Tally':
+      return const TabulatorMedalTally();
 
-      case 'Dashboard':
-        return const AdminDashboard();
+        case 'Dashboard':
+          return const AdminDashboard();
       default:
         return const Center(
           child: Text(
@@ -217,8 +218,8 @@ class _TabulatorMainState extends State<TabulatorMain>
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 5, 18, 37),
+              decoration: const BoxDecoration(
+                color: Color.fromARGB(255, 5, 18, 37),
               ),
               child: Row(
                 children: [
