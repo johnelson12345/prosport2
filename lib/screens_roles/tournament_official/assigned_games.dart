@@ -72,7 +72,6 @@ class _TeamScheduleManagementScreenState
         });
       }
     } catch (e) {
-      print('Error getting current user: $e');
     }
   }
 
@@ -163,7 +162,6 @@ class _TeamScheduleManagementScreenState
   }
 
   Future<void> _refreshTournamentData() async {
-    print('Refreshing tournament data...');
     setState(() {});
     
     try {
@@ -198,7 +196,6 @@ class _TeamScheduleManagementScreenState
         _tournamentDetailsNotifier.value = details;
       });
     } catch (e) {
-      print('Error refreshing tournament data: $e');
     }
   }
 
@@ -1175,14 +1172,12 @@ class _TeamScheduleManagementScreenState
                 });
               }
             } catch (e) {
-              print('Error getting team $teamId: $e');
             }
           }
           return teams;
         }
       }
     } catch (e) {
-      print('Error getting tournament teams: $e');
     }
     
     return [];
@@ -1240,9 +1235,8 @@ class _TeamScheduleManagementScreenState
         });
       }
     } catch (e) {
-      print('Error deleting match: $e');
     }
-  }
+    }
 
   List<Map<String, dynamic>> _organizeMatchesInBracketFormat(
       List<Map<String, dynamic>> matches) {
@@ -3795,7 +3789,6 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
         }
       }
     } catch (e) {
-      print('Error checking scores: $e');
       // Fallback to checking passed matches
       try {
         int count = 0;
