@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +29,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
   bool _isLoading = true;
   bool _isSaving = false;
   String? _savingMatchId;
+
+  // Filter mode - 'date' or 'all'
+  String _filterMode = 'date'; // 'date' or 'all'
 
   // Edit mode flag
   bool _isEditMode = false;
@@ -312,6 +314,32 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     }
   }
 
+  void _toggleFilterMode() {
+    setState(() {
+      _filterMode = _filterMode == 'date' ? 'all' : 'date';
+      _selectedTournamentId = null;
+      _selectedMatch = null;
+      _isEditMode = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _filterMode == 'all'
+              ? 'Showing all matches regardless of date'
+              : 'Showing matches for selected date',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        backgroundColor: Colors.deepOrange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _loadTournamentData() async {
     _tournamentService.getTournamentStream().listen((snapshot) {
       final Map<String, String> names = {};
@@ -424,276 +452,171 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     return '';
   }
 
+  // ============== FIXED METHODS FOR DOUBLE ELIMINATION ==============
+
+  // Helper method to check if a match is a placeholder that cannot be played yet
   bool _isPlaceholderMatch(
       Map<String, dynamic> match, List<Map<String, dynamic>> allMatches) {
-    // First check if match is completed - completed matches should NOT be in future matches
+    
+    // If match is already completed, it's definitely NOT a placeholder
     final status = match['status'] as String? ?? 'scheduled';
     final hasScores = match['scores'] != null ||
         (match['team1Score'] != null && match['team2Score'] != null);
-    final isCompleted = status == 'completed' || hasScores;
-
-    // If match is completed, it's NOT a placeholder regardless of team types
-    if (isCompleted) {
+    
+    if (status == 'completed' || hasScores) {
       return false;
     }
 
-    // Get team identifiers - checking multiple possible field names
-    final team1Id = match['team1Id']?.toString() ??
-        (match['team1'] != null ? match['team1']['id']?.toString() : '') ??
-        '';
-    final team2Id = match['team2Id']?.toString() ??
-        (match['team2'] != null ? match['team2']['id']?.toString() : '') ??
-        '';
+    // Get team information
+    final team1 = match['team1'] as Map<String, dynamic>?;
+    final team2 = match['team2'] as Map<String, dynamic>?;
+    
+    if (team1 == null || team2 == null) return true;
 
-    final team1Name = match['team1Name']?.toString() ??
-        (match['team1'] != null ? match['team1']['name']?.toString() : '') ??
-        '';
-    final team2Name = match['team2Name']?.toString() ??
-        (match['team2'] != null ? match['team2']['name']?.toString() : '') ??
-        '';
+    final team1Id = team1['id']?.toString() ?? '';
+    final team2Id = team2['id']?.toString() ?? '';
+    final team1Name = team1['name']?.toString() ?? '';
+    final team2Name = team2['name']?.toString() ?? '';
 
-    // Check if either team is a placeholder
-    bool isTeam1Placeholder = team1Id.contains('winner') ||
-        team1Id.contains('loser') ||
-        team1Name.contains('Winner') ||
-        team1Name.contains('Loser') ||
-        team1Id == 'match_1_winner' ||
-        team1Id == 'match_2_winner' ||
-        team1Id == 'match_3_winner' ||
-        team1Id.contains('placeholder');
+    // Check if teams are real participants (valid Firestore IDs)
+    bool isTeam1Real = _isRealParticipant(team1Id, team1);
+    bool isTeam2Real = _isRealParticipant(team2Id, team2);
 
-    bool isTeam2Placeholder = team2Id.contains('winner') ||
-        team2Id.contains('loser') ||
-        team2Name.contains('Winner') ||
-        team2Name.contains('Loser') ||
-        team2Id == 'match_1_winner' ||
-        team2Id == 'match_2_winner' ||
-        team2Id == 'match_3_winner' ||
-        team2Id.contains('placeholder');
-
-    // If neither team is a placeholder, it's a real match
-    if (!isTeam1Placeholder && !isTeam2Placeholder) {
+    // If both teams are real participants, it's a real match
+    if (isTeam1Real && isTeam2Real) {
       return false;
     }
 
-    // Get the tournament ID for this match to filter source matches
-    final tournamentId = match['tournamentSetupId']?.toString() ?? '';
+    // If either team is a placeholder (winner/loser of previous match), 
+    // check if that previous match is completed
+    bool team1Ready = _isTeamReady(team1, match, allMatches);
+    bool team2Ready = _isTeamReady(team2, match, allMatches);
 
-    // Filter matches to only those in the same tournament
-    final tournamentMatches = allMatches
-        .where((m) => m['tournamentSetupId']?.toString() == tournamentId)
-        .toList();
-
-    // Check team 1 placeholder
-    if (isTeam1Placeholder) {
-      // Try to extract source match number from various formats
-      int? sourceMatchNumber;
-
-      // Format: "match_1_winner"
-      RegExp matchIdRegExp = RegExp(r'match[_]?(\d+)[_]?winner');
-      final matchIdMatch = matchIdRegExp.firstMatch(team1Id);
-      if (matchIdMatch != null) {
-        sourceMatchNumber = int.tryParse(matchIdMatch.group(1) ?? '');
-      }
-
-      // Format: "Winner Match 1"
-      if (sourceMatchNumber == null) {
-        RegExp nameRegExp =
-            RegExp(r'Winner\s+Match\s+(\d+)', caseSensitive: false);
-        final nameMatch = nameRegExp.firstMatch(team1Name);
-        if (nameMatch != null) {
-          sourceMatchNumber = int.tryParse(nameMatch.group(1) ?? '');
-        }
-      }
-
-      // Format: just the number at the end
-      if (sourceMatchNumber == null) {
-        RegExp numberRegExp = RegExp(r'(\d+)$');
-        final numberMatch = numberRegExp.firstMatch(team1Id);
-        if (numberMatch != null) {
-          sourceMatchNumber = int.tryParse(numberMatch.group(1) ?? '');
-        }
-      }
-
-      // If we found a source match number, check if that match is completed
-      if (sourceMatchNumber != null) {
-        final sourceMatch = tournamentMatches.firstWhere(
-          (m) => m['matchNumber'] == sourceMatchNumber,
-          orElse: () => {},
-        );
-
-        if (sourceMatch.isNotEmpty) {
-          final sourceStatus = sourceMatch['status'] as String? ?? 'scheduled';
-          final sourceHasScores = sourceMatch['scores'] != null ||
-              (sourceMatch['team1Score'] != null &&
-                  sourceMatch['team2Score'] != null);
-          final sourceIsCompleted =
-              sourceStatus == 'completed' || sourceHasScores;
-
-          // If source match is completed, this team is no longer a placeholder
-          if (sourceIsCompleted) {
-            isTeam1Placeholder = false;
-          }
-        }
-      }
-    }
-
-    // Check team 2 placeholder similarly
-    if (isTeam2Placeholder) {
-      int? sourceMatchNumber;
-
-      // Format: "match_2_winner"
-      RegExp matchIdRegExp = RegExp(r'match[_]?(\d+)[_]?winner');
-      final matchIdMatch = matchIdRegExp.firstMatch(team2Id);
-      if (matchIdMatch != null) {
-        sourceMatchNumber = int.tryParse(matchIdMatch.group(1) ?? '');
-      }
-
-      // Format: "Winner Match 2"
-      if (sourceMatchNumber == null) {
-        RegExp nameRegExp =
-            RegExp(r'Winner\s+Match\s+(\d+)', caseSensitive: false);
-        final nameMatch = nameRegExp.firstMatch(team2Name);
-        if (nameMatch != null) {
-          sourceMatchNumber = int.tryParse(nameMatch.group(1) ?? '');
-        }
-      }
-
-      // Format: just the number at the end
-      if (sourceMatchNumber == null) {
-        RegExp numberRegExp = RegExp(r'(\d+)$');
-        final numberMatch = numberRegExp.firstMatch(team2Id);
-        if (numberMatch != null) {
-          sourceMatchNumber = int.tryParse(numberMatch.group(1) ?? '');
-        }
-      }
-
-      if (sourceMatchNumber != null) {
-        final sourceMatch = tournamentMatches.firstWhere(
-          (m) => m['matchNumber'] == sourceMatchNumber,
-          orElse: () => {},
-        );
-
-        if (sourceMatch.isNotEmpty) {
-          final sourceStatus = sourceMatch['status'] as String? ?? 'scheduled';
-          final sourceHasScores = sourceMatch['scores'] != null ||
-              (sourceMatch['team1Score'] != null &&
-                  sourceMatch['team2Score'] != null);
-          final sourceIsCompleted =
-              sourceStatus == 'completed' || sourceHasScores;
-
-          if (sourceIsCompleted) {
-            isTeam2Placeholder = false;
-          }
-        }
-      }
-    }
-
-    // Also check nextMatchReference which might indicate this match depends on previous ones
-    final nextMatchRef = match['nextMatchReference'];
-    if (nextMatchRef != null && !isTeam1Placeholder && !isTeam2Placeholder) {
-      // This match might be waiting for previous matches even if teams don't show as placeholders
-      // For example, in your data, Match 1 and Match 2 have nextMatchReference: 3
-      // That means Match 3 depends on them
-
-      // Find all matches that reference this match as their next match
-      final previousMatches = tournamentMatches
-          .where((m) => m['nextMatchReference'] == match['matchNumber'])
-          .toList();
-
-      if (previousMatches.isNotEmpty) {
-        // Check if all previous matches are completed
-        bool allPreviousCompleted = true;
-        for (var prevMatch in previousMatches) {
-          final prevStatus = prevMatch['status'] as String? ?? 'scheduled';
-          final prevHasScores = prevMatch['scores'] != null ||
-              (prevMatch['team1Score'] != null &&
-                  prevMatch['team2Score'] != null);
-          final prevCompleted = prevStatus == 'completed' || prevHasScores;
-
-          if (!prevCompleted) {
-            allPreviousCompleted = false;
-            break;
-          }
-        }
-
-        // If not all previous matches are completed, this is still a placeholder
-        if (!allPreviousCompleted) {
-          return true;
-        }
-      }
-    }
-
-    // Return true if either team is still a placeholder
-    return isTeam1Placeholder || isTeam2Placeholder;
+    // Match can be played if both teams are ready
+    return !(team1Ready && team2Ready);
   }
 
+  // Check if a team is a real participant (not a placeholder)
+  bool _isRealParticipant(String teamId, Map<String, dynamic>? team) {
+    if (teamId.isEmpty) return false;
+    
+    // Check if it's a placeholder identifier
+    if (teamId.contains('winner') || 
+        teamId.contains('loser') || 
+        teamId.contains('placeholder') ||
+        teamId.contains('match_')) {
+      return false;
+    }
+    
+    // Check team object properties
+    if (team != null) {
+      final teamType = team['type']?.toString() ?? '';
+      if (teamType == 'placeholder' || team['isPlaceholder'] == true) {
+        return false;
+      }
+    }
+    
+    // Valid Firestore IDs are typically 20+ characters alphanumeric
+    // But we'll be less strict - if it has a name and not placeholder patterns, consider it real
+    return true;
+  }
+
+  // Check if a team is ready to play (source matches completed if placeholder)
+  bool _isTeamReady(Map<String, dynamic>? team, 
+      Map<String, dynamic> match, List<Map<String, dynamic>> allMatches) {
+    
+    if (team == null) return false;
+
+    final teamId = team['id']?.toString() ?? '';
+    final teamName = team['name']?.toString() ?? '';
+    final teamType = team['type']?.toString() ?? '';
+
+    // If it's a real participant, it's ready
+    if (_isRealParticipant(teamId, team)) return true;
+
+    // Check if it's a placeholder that depends on previous match
+    int? sourceMatchNumber = _extractSourceMatchNumber(teamId, teamName);
+    
+    if (sourceMatchNumber == null) {
+      // If we can't extract source match, assume it's not ready
+      return false;
+    }
+
+    // Get tournament ID
+    final tournamentId = match['tournamentSetupId']?.toString() ?? '';
+    
+    // Find source match
+    final sourceMatch = allMatches.firstWhere(
+      (m) => m['tournamentSetupId']?.toString() == tournamentId && 
+             m['matchNumber'] == sourceMatchNumber,
+      orElse: () => {},
+    );
+
+    if (sourceMatch.isEmpty) return false;
+
+    // Check if source match is completed
+    final sourceStatus = sourceMatch['status'] as String? ?? 'scheduled';
+    final sourceHasScores = sourceMatch['scores'] != null ||
+        (sourceMatch['team1Score'] != null && sourceMatch['team2Score'] != null);
+    
+    return sourceStatus == 'completed' || sourceHasScores;
+  }
+
+  // Extract source match number from placeholder identifier
+  int? _extractSourceMatchNumber(String teamId, String teamName) {
+    // Try various patterns
+    List<RegExp> patterns = [
+      RegExp(r'match[_]?(\d+)[_]?(?:winner|loser)', caseSensitive: false),
+      RegExp(r'(?:winner|loser)\s+match\s+(\d+)', caseSensitive: false),
+      RegExp(r'(?:winner|loser)\s+of\s+match\s+(\d+)', caseSensitive: false),
+      RegExp(r'(\d+)$'), // numbers at the end
+    ];
+    
+    for (var pattern in patterns) {
+      // Try on teamId
+      if (teamId.isNotEmpty) {
+        final match = pattern.firstMatch(teamId);
+        if (match != null) {
+          return int.tryParse(match.group(1) ?? '');
+        }
+      }
+      
+      // Try on teamName
+      if (teamName.isNotEmpty) {
+        final match = pattern.firstMatch(teamName);
+        if (match != null) {
+          return int.tryParse(match.group(1) ?? '');
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  // Get display name for a team (resolves placeholders if source match completed)
   String _getTeamDisplayName(Map<String, dynamic>? team,
       Map<String, dynamic> match, List<Map<String, dynamic>> allMatches) {
+    
     if (team == null) return 'TBD';
 
     final teamId = team['id']?.toString() ?? '';
     final teamName = team['name']?.toString() ?? '';
     final teamType = team['type']?.toString() ?? '';
 
-    // Check if it's a placeholder
-    bool isPlaceholder = teamType == 'placeholder' ||
-        teamId.contains('placeholder') ||
-        teamId.contains('winner') ||
-        teamId.contains('loser') ||
-        teamName.contains('Winner') ||
-        teamName.contains('Loser') ||
-        team['isPlaceholder'] == true;
-
-    if (!isPlaceholder) {
-      // Regular team - return the actual name
+    // If it's a real participant, return the name
+    if (_isRealParticipant(teamId, team)) {
       return team['displayName'] ?? teamName ?? 'Unknown Team';
     }
 
-    // It's a placeholder - try to get the actual winner/loser from source match
-    int? sourceMatchNumber;
-
-    // Extract source match number from various formats
-    // Format: "match_1_winner" or "match_1_loser"
-    RegExp matchIdRegExp =
-        RegExp(r'match[_]?(\d+)[_]?(?:winner|loser)', caseSensitive: false);
-    final matchIdMatch = matchIdRegExp.firstMatch(teamId);
-    if (matchIdMatch != null) {
-      sourceMatchNumber = int.tryParse(matchIdMatch.group(1) ?? '');
-    }
-
-    // Format: "Winner Match 1" or "Loser Match 1"
-    if (sourceMatchNumber == null) {
-      RegExp nameRegExp =
-          RegExp(r'(?:Winner|Loser)\s+Match\s+(\d+)', caseSensitive: false);
-      final nameMatch = nameRegExp.firstMatch(teamName);
-      if (nameMatch != null) {
-        sourceMatchNumber = int.tryParse(nameMatch.group(1) ?? '');
-      }
-    }
-
-    // Format: "Winner of Match 1"
-    if (sourceMatchNumber == null) {
-      RegExp ofRegExp = RegExp(r'(?:Winner|Loser)\s+of\s+Match\s+(\d+)',
-          caseSensitive: false);
-      final ofMatch = ofRegExp.firstMatch(teamName);
-      if (ofMatch != null) {
-        sourceMatchNumber = int.tryParse(ofMatch.group(1) ?? '');
-      }
-    }
-
+    // Try to resolve placeholder
+    int? sourceMatchNumber = _extractSourceMatchNumber(teamId, teamName);
+    
     if (sourceMatchNumber != null) {
-      // Get the tournament ID for this match to filter source matches
       final tournamentId = match['tournamentSetupId']?.toString() ?? '';
-
-      // Filter matches to only those in the same tournament
-      final tournamentMatches = allMatches
-          .where((m) => m['tournamentSetupId']?.toString() == tournamentId)
-          .toList();
-
-      // Find the source match
-      final sourceMatch = tournamentMatches.firstWhere(
-        (m) => m['matchNumber'] == sourceMatchNumber,
+      
+      final sourceMatch = allMatches.firstWhere(
+        (m) => m['tournamentSetupId']?.toString() == tournamentId && 
+               m['matchNumber'] == sourceMatchNumber,
         orElse: () => {},
       );
 
@@ -701,62 +624,40 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
         // Check if source match is completed
         final sourceStatus = sourceMatch['status'] as String? ?? 'scheduled';
         final sourceHasScores = sourceMatch['scores'] != null ||
-            (sourceMatch['team1Score'] != null &&
-                sourceMatch['team2Score'] != null);
-        final sourceIsCompleted =
-            sourceStatus == 'completed' || sourceHasScores;
+            (sourceMatch['team1Score'] != null && sourceMatch['team2Score'] != null);
+        final sourceIsCompleted = sourceStatus == 'completed' || sourceHasScores;
 
         if (sourceIsCompleted) {
-          // Get the winner or loser from source match
-          final winner = sourceMatch['winner']?.toString();
+          // Determine if this is for winner or loser
+          bool isWinner = teamId.contains('winner') || 
+                         teamName.contains('Winner') ||
+                         teamType.contains('winner');
 
-          // Determine if this placeholder is for winner or loser
-          bool isWinner = teamId.contains('winner') ||
-              teamName.contains('Winner') ||
-              teamType.contains('winner');
-
-          if (isWinner && winner != null) {
-            // Find the winning team in source match
-            final team1 = sourceMatch['team1'] as Map<String, dynamic>?;
-            final team2 = sourceMatch['team2'] as Map<String, dynamic>?;
-
-            if (team1 != null && team1['id']?.toString() == winner) {
-              return team1['displayName'] ?? team1['name'] ?? 'Unknown Team';
-            } else if (team2 != null && team2['id']?.toString() == winner) {
-              return team2['displayName'] ?? team2['name'] ?? 'Unknown Team';
-            } else {
-              // Try using team1Id/team2Id fields
-              if (sourceMatch['team1Id']?.toString() == winner) {
-                return sourceMatch['team1Name'] ?? 'Unknown Team';
-              } else if (sourceMatch['team2Id']?.toString() == winner) {
-                return sourceMatch['team2Name'] ?? 'Unknown Team';
+          if (isWinner) {
+            // Get winner from source match
+            final winner = sourceMatch['winner']?.toString();
+            if (winner != null) {
+              // Find winning team
+              final team1 = sourceMatch['team1'] as Map<String, dynamic>?;
+              final team2 = sourceMatch['team2'] as Map<String, dynamic>?;
+              
+              if (team1 != null && team1['id']?.toString() == winner) {
+                return team1['displayName'] ?? team1['name'] ?? 'Unknown Team';
+              } else if (team2 != null && team2['id']?.toString() == winner) {
+                return team2['displayName'] ?? team2['name'] ?? 'Unknown Team';
               }
             }
           } else {
-            // It's a loser placeholder - get the loser
-            // Determine loser by finding which team didn't win
-            final team1Id = sourceMatch['team1Id']?.toString() ??
-                (sourceMatch['team1'] != null
-                    ? sourceMatch['team1']['id']?.toString()
-                    : '');
-            final team2Id = sourceMatch['team2Id']?.toString() ??
-                (sourceMatch['team2'] != null
-                    ? sourceMatch['team2']['id']?.toString()
-                    : '');
-
-            if (winner != null) {
-              if (team1Id == winner) {
-                // Team 1 won, so loser is team 2
-                return sourceMatch['team2Name'] ??
-                    (sourceMatch['team2'] != null
-                        ? sourceMatch['team2']['name']
-                        : 'Unknown Team');
-              } else if (team2Id == winner) {
-                // Team 2 won, so loser is team 1
-                return sourceMatch['team1Name'] ??
-                    (sourceMatch['team1'] != null
-                        ? sourceMatch['team1']['name']
-                        : 'Unknown Team');
+            // Get loser from source match
+            final winner = sourceMatch['winner']?.toString();
+            final team1 = sourceMatch['team1'] as Map<String, dynamic>?;
+            final team2 = sourceMatch['team2'] as Map<String, dynamic>?;
+            
+            if (winner != null && team1 != null && team2 != null) {
+              if (team1['id']?.toString() == winner) {
+                return team2['displayName'] ?? team2['name'] ?? 'Unknown Team';
+              } else if (team2['id']?.toString() == winner) {
+                return team1['displayName'] ?? team1['name'] ?? 'Unknown Team';
               }
             }
           }
@@ -766,21 +667,18 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
             return 'Winner of Match $sourceMatchNumber';
           } else if (teamName.contains('Loser')) {
             return 'Loser of Match $sourceMatchNumber';
-          } else {
-            return '${teamName.contains('Winner') ? 'Winner' : 'Team'} (Match $sourceMatchNumber)';
           }
         }
       }
     }
 
-    // If we can't resolve, return a descriptive placeholder
-    if (teamName.contains('Winner')) {
-      return teamName;
-    } else if (teamId.contains('winner')) {
-      return 'Winner (Match ${teamId.replaceAll(RegExp(r'[^0-9]'), '')})';
-    } else {
-      return team['name'] ?? 'TBD';
-    }
+    // Return placeholder text if can't resolve
+    if (teamName.contains('Winner')) return teamName;
+    if (teamName.contains('Loser')) return teamName;
+    if (teamId.contains('winner')) return 'Winner (TBD)';
+    if (teamId.contains('loser')) return 'Loser (TBD)';
+    
+    return teamName.isNotEmpty ? teamName : 'TBD';
   }
 
   String? _getTeamId(Map<String, dynamic>? team) {
@@ -797,13 +695,16 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     return _currentUserId != null && assignedUsers.contains(_currentUserId);
   }
 
+  // ============== END OF FIXED METHODS ==============
+
   Future<void> _saveScore(String matchId, Map<String, dynamic> match) async {
     if (_isSaving) return;
 
-    if (!_isEditMode && _isPlaceholderMatch(match, _allMatches)) {
+    // Check if match is a placeholder (cannot be played yet)
+    if (_isPlaceholderMatch(match, _allMatches)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Cannot save scores for placeholder matches'),
+          content: Text('Cannot save scores for placeholder matches - waiting for previous matches to complete'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -880,7 +781,7 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
       editHistory.add({
         'timestamp': DateTime.now().toIso8601String(),
         'editedBy': _currentUserId,
-        'previousScores': matchups[matchIndex]['sories'],
+        'previousScores': matchups[matchIndex]['scores'],
         'previousWinner': matchups[matchIndex]['winner'],
         'previousTeam1Score': matchups[matchIndex]['team1Score'],
         'previousTeam2Score': matchups[matchIndex]['team2Score'],
@@ -1002,32 +903,34 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     });
   }
 
-  List<Map<String, dynamic>> _filterMatchesByDateAndAssignment(
+  List<Map<String, dynamic>> _filterMatchesByMode(
       List<Map<String, dynamic>> allSchedules) {
-    return allSchedules.where((schedule) {
-      // Get the tournament ID
-      final tournamentId = schedule['tournamentSetupId'];
-      if (tournamentId == null) return false;
+    
+    if (_filterMode == 'all') {
+      // Return all matches regardless of date
+      return allSchedules.where((schedule) {
+        final tournamentId = schedule['tournamentSetupId'];
+        if (tournamentId == null) return false;
+        return _isUserAssignedToTournament(tournamentId);
+      }).toList();
+    } else {
+      // Filter by selected date
+      return allSchedules.where((schedule) {
+        final tournamentId = schedule['tournamentSetupId'];
+        if (tournamentId == null) return false;
 
-      // Check if user is assigned to the tournament
-      if (!_isUserAssignedToTournament(tournamentId)) return false;
+        if (!_isUserAssignedToTournament(tournamentId)) return false;
 
-      // Get match date
-      final dateTimeStr = schedule['dateTime'] ?? schedule['startTime'];
-      final matchDateTime = _parseMatchDateTime(dateTimeStr);
+        final dateTimeStr = schedule['dateTime'] ?? schedule['startTime'];
+        final matchDateTime = _parseMatchDateTime(dateTimeStr);
 
-      if (matchDateTime == null) {
-        print('Could not parse date for match: ${schedule['id']}');
-        return false;
-      }
+        if (matchDateTime == null) return false;
 
-      // Compare dates (ignore time)
-      final isOnSelectedDate = matchDateTime.year == _selectedDate.year &&
-          matchDateTime.month == _selectedDate.month &&
-          matchDateTime.day == _selectedDate.day;
-
-      return isOnSelectedDate;
-    }).toList();
+        return matchDateTime.year == _selectedDate.year &&
+            matchDateTime.month == _selectedDate.month &&
+            matchDateTime.day == _selectedDate.day;
+      }).toList();
+    }
   }
 
   @override
@@ -1060,7 +963,22 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
           ],
         ),
         actions: [
-          _buildDateSelector(),
+          // Filter mode toggle
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildFilterChip('Date', 'date'),
+                _buildFilterChip('All', 'all'),
+              ],
+            ),
+          ),
+          if (_filterMode == 'date') _buildDateSelector(),
           const SizedBox(width: 16),
         ],
       ),
@@ -1079,9 +997,11 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
 
                 final allSchedules = snapshot.data ?? [];
                 _allMatches = allSchedules;
-                final userAssignedSchedules =
-                    _filterMatchesByDateAndAssignment(allSchedules);
 
+                final userAssignedSchedules =
+                    _filterMatchesByMode(allSchedules);
+
+                // Separate real matches from placeholders
                 final realMatches = userAssignedSchedules
                     .where((match) => !_isPlaceholderMatch(match, allSchedules))
                     .toList();
@@ -1139,6 +1059,32 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     );
   }
 
+  Widget _buildFilterChip(String label, String mode) {
+    final isSelected = _filterMode == mode;
+    return GestureDetector(
+      onTap: () {
+        if (_filterMode != mode) {
+          _toggleFilterMode();
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.deepOrange : Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDateSelector() {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
@@ -1182,6 +1128,10 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
   }
 
   Widget _buildMatchStats(int activeCount, int futureCount) {
+    String subtitle = _filterMode == 'all' 
+        ? 'All Matches' 
+        : 'Matches for ${_displayDateFormat.format(_selectedDate)}';
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1192,26 +1142,45 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Today\'s Schedule',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D3748),
-            ),
+          Row(
+            children: [
+              Text(
+                _filterMode == 'all' ? 'All Matches' : 'Today\'s Schedule',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2D3748),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.deepOrange.shade700,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Row(
             children: [
               _buildStatCard(
-                'Active Matches',
+                'Available Matches',
                 activeCount.toString(),
                 Colors.deepOrange,
                 Icons.play_circle_filled,
               ),
               const SizedBox(width: 12),
               _buildStatCard(
-                'Future Matches',
+                'Pending',
                 futureCount.toString(),
                 Colors.blue,
                 Icons.schedule,
@@ -1288,6 +1257,10 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
         _tournamentNames[tournamentId] ?? 'Unknown Tournament';
     final tournamentInfo = _tournamentDetails[tournamentId] ?? {};
     final sport = tournamentInfo['sport'] ?? 'Unknown';
+    final bracketType = tournamentInfo['bracketType'] ?? 'single';
+    final bracketIcon = bracketType == 'double' 
+        ? Icons.sports_esports 
+        : Icons.emoji_events;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1297,20 +1270,27 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.deepOrange.withOpacity(0.05),
+              color: bracketType == 'double' 
+                  ? Colors.purple.withOpacity(0.05)
+                  : Colors.deepOrange.withOpacity(0.05),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.deepOrange.withOpacity(0.2)),
+              border: Border.all(
+                color: bracketType == 'double'
+                    ? Colors.purple.withOpacity(0.2)
+                    : Colors.deepOrange.withOpacity(0.2),
+              ),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: Colors.deepOrange,
+                    color: bracketType == 'double' 
+                        ? Colors.purple 
+                        : Colors.deepOrange,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Icon(Icons.emoji_events,
-                      color: Colors.white, size: 14),
+                  child: Icon(bracketIcon, color: Colors.white, size: 14),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -1327,12 +1307,34 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
-                        sport,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            sport,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          if (bracketType == 'double') ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Double Elim',
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  color: Colors.purple.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -1341,7 +1343,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.deepOrange.shade100,
+                    color: bracketType == 'double'
+                        ? Colors.purple.shade100
+                        : Colors.deepOrange.shade100,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -1349,7 +1353,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: Colors.deepOrange.shade700,
+                      color: bracketType == 'double'
+                          ? Colors.purple.shade700
+                          : Colors.deepOrange.shade700,
                     ),
                   ),
                 ),
@@ -1376,6 +1382,11 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     final matchNumber = match['matchNumber'] ?? '#';
     final hasScores = match['scores'] != null ||
         (match['team1Score'] != null && match['team2Score'] != null);
+    
+    // Check if this is a double elimination match
+    final tournamentId = match['tournamentSetupId']?.toString() ?? '';
+    final tournamentInfo = _tournamentDetails[tournamentId];
+    final isDoubleElim = tournamentInfo?['bracketType'] == 'double';
 
     return InkWell(
       onTap: () {
@@ -1408,7 +1419,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
               width: 4,
               height: 40,
               decoration: BoxDecoration(
-                color: hasScores ? Colors.green : Colors.deepOrange.shade200,
+                color: hasScores 
+                    ? Colors.green 
+                    : (isDoubleElim ? Colors.purple.shade300 : Colors.deepOrange.shade200),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -1432,6 +1445,24 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                           color: Colors.grey.shade700,
                         ),
                       ),
+                      if (isDoubleElim) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            match['matchType']?.toString().toLowerCase() ?? 'DE',
+                            style: TextStyle(
+                              fontSize: 8,
+                              color: Colors.purple.shade700,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(width: 6),
                       if (matchTime.isNotEmpty)
                         Container(
@@ -1469,11 +1500,11 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.edit_note,
+                              Icon(Icons.check_circle,
                                   size: 10, color: Colors.green.shade600),
                               const SizedBox(width: 2),
                               Text(
-                                'Editable',
+                                'Completed',
                                 style: TextStyle(
                                   fontSize: 8,
                                   color: Colors.green.shade700,
@@ -1599,7 +1630,7 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                 ),
                 const SizedBox(width: 8),
                 const Text(
-                  'Future Matches',
+                  'Pending Matches',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -1644,10 +1675,14 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     final team2Id = _getTeamId(team2);
     final matchNumber = match['matchNumber'] ?? '#';
 
-    // Check if this future match now has resolved teams (from previous matches)
-    final isTeam1Resolved = !_isPlaceholderTeam(team1, match, _allMatches);
-    final isTeam2Resolved = !_isPlaceholderTeam(team2, match, _allMatches);
-    final isFullyResolved = isTeam1Resolved && isTeam2Resolved;
+    // Check if teams are ready
+    final tournamentId = match['tournamentSetupId']?.toString() ?? '';
+    final tournamentInfo = _tournamentDetails[tournamentId];
+    final isDoubleElim = tournamentInfo?['bracketType'] == 'double';
+    
+    final isTeam1Ready = _isTeamReady(team1, match, _allMatches);
+    final isTeam2Ready = _isTeamReady(team2, match, _allMatches);
+    final isFullyResolved = isTeam1Ready && isTeam2Ready;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -1667,18 +1702,18 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
             decoration: BoxDecoration(
               color: isFullyResolved
                   ? Colors.green.shade400
-                  : Colors.blue.shade200,
+                  : (isDoubleElim ? Colors.purple.shade300 : Colors.blue.shade200),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           const SizedBox(width: 10),
 
-          // Team 1 Logo (shows actual logo if resolved, otherwise placeholder)
+          // Team 1 Logo
           _buildTeamLogo(
-            isTeam1Resolved ? team1Id : null,
+            isTeam1Ready ? team1Id : null,
             team1Name,
             size: 30,
-            useGradient: !isTeam1Resolved,
+            useGradient: !isTeam1Ready,
           ),
           const SizedBox(width: 8),
 
@@ -1696,6 +1731,24 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                         color: Colors.grey.shade600,
                       ),
                     ),
+                    if (isDoubleElim) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          match['matchType']?.toString().toLowerCase() ?? 'DE',
+                          style: TextStyle(
+                            fontSize: 8,
+                            color: Colors.purple.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                     if (isFullyResolved)
                       Container(
                         margin: const EdgeInsets.only(left: 4),
@@ -1732,10 +1785,10 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                         team1Name,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: isTeam1Resolved
+                          fontWeight: isTeam1Ready
                               ? FontWeight.w500
                               : FontWeight.normal,
-                          color: isTeam1Resolved
+                          color: isTeam1Ready
                               ? Colors.grey.shade800
                               : Colors.grey.shade500,
                         ),
@@ -1758,10 +1811,10 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                         team2Name,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: isTeam2Resolved
+                          fontWeight: isTeam2Ready
                               ? FontWeight.w500
                               : FontWeight.normal,
-                          color: isTeam2Resolved
+                          color: isTeam2Ready
                               ? Colors.grey.shade800
                               : Colors.grey.shade500,
                         ),
@@ -1776,13 +1829,13 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
             ),
           ),
 
-          // Team 2 Logo (shows actual logo if resolved, otherwise placeholder)
+          // Team 2 Logo
           const SizedBox(width: 8),
           _buildTeamLogo(
-            isTeam2Resolved ? team2Id : null,
+            isTeam2Ready ? team2Id : null,
             team2Name,
             size: 30,
-            useGradient: !isTeam2Resolved,
+            useGradient: !isTeam2Ready,
           ),
 
           const SizedBox(width: 8),
@@ -1808,73 +1861,6 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
         ],
       ),
     );
-  }
-
-  // Helper method to check if a team is a placeholder
-  bool _isPlaceholderTeam(Map<String, dynamic>? team,
-      Map<String, dynamic> match, List<Map<String, dynamic>> allMatches) {
-    if (team == null) return true;
-
-    final teamId = team['id']?.toString() ?? '';
-    final teamName = team['name']?.toString() ?? '';
-    final teamType = team['type']?.toString() ?? '';
-
-    // Check if it's a placeholder
-    bool isPlaceholder = teamType == 'placeholder' ||
-        teamId.contains('placeholder') ||
-        teamId.contains('winner') ||
-        teamId.contains('loser') ||
-        teamName.contains('Winner') ||
-        teamName.contains('Loser') ||
-        team['isPlaceholder'] == true;
-
-    if (!isPlaceholder) return false;
-
-    // Try to resolve if source match is completed
-    int? sourceMatchNumber;
-    RegExp matchIdRegExp =
-        RegExp(r'match[_]?(\d+)[_]?(?:winner|loser)', caseSensitive: false);
-    final matchIdMatch = matchIdRegExp.firstMatch(teamId);
-    if (matchIdMatch != null) {
-      sourceMatchNumber = int.tryParse(matchIdMatch.group(1) ?? '');
-    }
-
-    if (sourceMatchNumber == null) {
-      RegExp nameRegExp =
-          RegExp(r'(?:Winner|Loser)\s+Match\s+(\d+)', caseSensitive: false);
-      final nameMatch = nameRegExp.firstMatch(teamName);
-      if (nameMatch != null) {
-        sourceMatchNumber = int.tryParse(nameMatch.group(1) ?? '');
-      }
-    }
-
-    if (sourceMatchNumber != null) {
-      final tournamentId = match['tournamentSetupId']?.toString() ?? '';
-      final tournamentMatches = allMatches
-          .where((m) => m['tournamentSetupId']?.toString() == tournamentId)
-          .toList();
-
-      final sourceMatch = tournamentMatches.firstWhere(
-        (m) => m['matchNumber'] == sourceMatchNumber,
-        orElse: () => {},
-      );
-
-      if (sourceMatch.isNotEmpty) {
-        final sourceStatus = sourceMatch['status'] as String? ?? 'scheduled';
-        final sourceHasScores = sourceMatch['scores'] != null ||
-            (sourceMatch['team1Score'] != null &&
-                sourceMatch['team2Score'] != null);
-        final sourceIsCompleted =
-            sourceStatus == 'completed' || sourceHasScores;
-
-        // If source match is completed, this team is no longer a placeholder
-        if (sourceIsCompleted) {
-          return false;
-        }
-      }
-    }
-
-    return true;
   }
 
   Widget _buildSelectionPrompt() {
@@ -1905,7 +1891,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Choose from the matches on the left panel',
+            _filterMode == 'all'
+                ? 'Showing all matches from all tournaments'
+                : 'Choose from the matches on the left panel',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey.shade600,
@@ -1930,6 +1918,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     final matchNumber = match['matchNumber'] ?? '#';
     final bracket = match['bracket'] ?? 'Match';
     final matchTime = _formatMatchTime(match['dateTime'] ?? match['startTime']);
+
+    // Check if this is a placeholder match
+    final isPlaceholder = _isPlaceholderMatch(match, _allMatches);
 
     final existingScores = match['scores'] as Map<String, dynamic>? ?? {};
     final score1 = existingScores[team1Id ?? team1Name] ??
@@ -1998,6 +1989,33 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                               _isEditMode = false;
                             });
                           },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Placeholder Warning
+                if (isPlaceholder && !hasScores)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning, color: Colors.orange.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'This match is waiting for previous matches to complete before it can be played',
+                            style: TextStyle(
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -2152,7 +2170,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                                           const EdgeInsets.symmetric(
                                               vertical: 16),
                                     ),
-                                    enabled: !isSavingThis && _isEditMode,
+                                    enabled: !isSavingThis && 
+                                            (_isEditMode || !hasScores) && 
+                                            !isPlaceholder,
                                   ),
                                 ),
                               ],
@@ -2248,7 +2268,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                                           const EdgeInsets.symmetric(
                                               vertical: 16),
                                     ),
-                                    enabled: !isSavingThis && _isEditMode,
+                                    enabled: !isSavingThis && 
+                                            (_isEditMode || !hasScores) && 
+                                            !isPlaceholder,
                                   ),
                                 ),
                               ],
@@ -2288,7 +2310,7 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                                     isSelected: _selectedWinners[matchId] ==
                                         (team1Id ?? team1Name),
                                     color: Colors.deepOrange,
-                                    onTap: _isEditMode
+                                    onTap: (_isEditMode || !hasScores) && !isPlaceholder
                                         ? () {
                                             setState(() {
                                               _selectedWinners[matchId] =
@@ -2306,7 +2328,7 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                                     isSelected: _selectedWinners[matchId] ==
                                         (team2Id ?? team2Name),
                                     color: Colors.blue,
-                                    onTap: _isEditMode
+                                    onTap: (_isEditMode || !hasScores) && !isPlaceholder
                                         ? () {
                                             setState(() {
                                               _selectedWinners[matchId] =
@@ -2323,7 +2345,7 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                                     isSelected:
                                         _selectedWinners[matchId] == 'tie',
                                     color: Colors.purple,
-                                    onTap: _isEditMode
+                                    onTap: (_isEditMode || !hasScores) && !isPlaceholder
                                         ? () {
                                             setState(() {
                                               _selectedWinners[matchId] = 'tie';
@@ -2345,7 +2367,9 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: (isSavingThis || !_isEditMode)
+                              onPressed: (isSavingThis || 
+                                        isPlaceholder || 
+                                        (!_isEditMode && hasScores))
                                   ? null
                                   : () {
                                       _scoreControllers['${matchId}_1']
@@ -2373,15 +2397,19 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                           Expanded(
                             flex: 2,
                             child: ElevatedButton(
-                              onPressed: (isSavingThis || !_isEditMode)
+                              onPressed: (isSavingThis || 
+                                        isPlaceholder || 
+                                        (!_isEditMode && hasScores))
                                   ? null
                                   : () => _saveScore(matchId, match),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _isEditMode
-                                    ? Colors.blue
-                                    : (hasScores
-                                        ? Colors.green
-                                        : Colors.deepOrange),
+                                backgroundColor: isPlaceholder
+                                    ? Colors.grey
+                                    : (_isEditMode
+                                        ? Colors.blue
+                                        : (hasScores
+                                            ? Colors.green
+                                            : Colors.deepOrange)),
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(
@@ -2398,11 +2426,13 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                                       ),
                                     )
                                   : Text(
-                                      _isEditMode
-                                          ? 'Update Score'
-                                          : (hasScores
-                                              ? 'Completed'
-                                              : 'Save Score'),
+                                      isPlaceholder
+                                          ? 'Cannot Score'
+                                          : (_isEditMode
+                                              ? 'Update Score'
+                                              : (hasScores
+                                                  ? 'Completed'
+                                                  : 'Save Score')),
                                       style: const TextStyle(fontSize: 16),
                                     ),
                             ),
@@ -2490,6 +2520,32 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
                           ),
                         ),
                       ],
+
+                      if (isPlaceholder && !hasScores)
+                        Container(
+                          margin: const EdgeInsets.only(top: 16),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info, color: Colors.orange.shade700, size: 24),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'This match will become available once previous matches are completed.',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -2501,7 +2557,7 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
     );
   }
 
-  // Add this new method for winner buttons with logos
+  // Winner button with logo
   Widget _buildWinnerButtonWithLogo({
     required String label,
     required String? teamId,
@@ -2637,6 +2693,10 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
   }
 
   Widget _buildEmptyState() {
+    String message = _filterMode == 'all'
+        ? 'No matches found in any tournament'
+        : 'No matches scheduled for ${_displayDateFormat.format(_selectedDate)}';
+    
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -2652,7 +2712,7 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
           ),
           const SizedBox(height: 24),
           Text(
-            'No matches scheduled',
+            'No matches found',
             style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -2660,23 +2720,38 @@ class _ScoreEncodingScreenState extends State<ScoreEncodingScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'for ${_displayDateFormat.format(_selectedDate)}',
+            message,
             style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              setState(() {
-                _selectedDate = DateTime.now();
-              });
-            },
-            icon: const Icon(Icons.today),
-            label: const Text('View Today\'s Matches'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepOrange,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          if (_filterMode == 'date')
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _selectedDate = DateTime.now();
+                });
+              },
+              icon: const Icon(Icons.today),
+              label: const Text('View Today\'s Matches'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
             ),
-          ),
+          if (_filterMode == 'all')
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _filterMode = 'date';
+                });
+              },
+              icon: const Icon(Icons.calendar_today),
+              label: const Text('Switch to Date View'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
         ],
       ),
     );
