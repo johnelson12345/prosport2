@@ -67,7 +67,7 @@ class _TournamentManagementScreenState
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Container(
+                  child: SizedBox(
                     width: MediaQuery.of(context).size.width * 0.8,
                     height: MediaQuery.of(context).size.height * 0.8,
                     child: Column(
@@ -130,7 +130,7 @@ class _TournamentManagementScreenState
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Container(
+                child: SizedBox(
                   width: MediaQuery.of(context).size.width * 0.9,
                   height: MediaQuery.of(context).size.height * 0.9,
                   child: const SchedulesManagementScreen(),

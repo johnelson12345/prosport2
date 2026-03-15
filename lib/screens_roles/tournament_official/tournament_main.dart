@@ -84,7 +84,7 @@ class _TournamentMainState extends State<TournamentMain>
           setState(() {});
         }
       } catch (e) {
-        debugPrint('Error loading custom photoURL: $e');
+        // Silently handle photoURL load error
       }
     }
   }
@@ -98,14 +98,13 @@ class _TournamentMainState extends State<TournamentMain>
           // Clean up the base64 string - remove any whitespace or hidden characters
           final cleanBase64 = base64String.replaceAll(RegExp(r'\s'), '');
           final bytes = base64Decode(cleanBase64);
-          debugPrint(
-              'Successfully decoded base64 image, size: ${bytes.length} bytes');
+          // Base64 image decoded successfully
           return MemoryImage(bytes);
         } else {
           return NetworkImage(_customPhotoURL!);
         }
       } catch (e) {
-        debugPrint('Error decoding profile image: $e');
+        // Silently handle image decode error
         return null;
       }
     } else if (_currentUser?.photoURL != null) {
@@ -131,7 +130,7 @@ class _TournamentMainState extends State<TournamentMain>
       }
       setState(() {});
     } catch (e) {
-      debugPrint('Error loading active sports event: $e');
+      // Silently handle active event load error
       _activeSportsEventName = null;
       setState(() {});
     }

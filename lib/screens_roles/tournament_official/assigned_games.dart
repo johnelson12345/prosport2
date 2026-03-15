@@ -2,14 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/teams/team_schedule_management_dialog_enhanced.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_mngmt_dialog.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/bracket.dart';
 import 'package:tabulation_systemv7/services/scores.dart';
 import 'package:tabulation_systemv7/services/team_schedule_service.dart';
 import 'package:tabulation_systemv7/services/tournament_service.dart';
 import 'package:tabulation_systemv7/services/team_service.dart';
-import 'package:uuid/uuid.dart';
 import 'dart:async';
 
 class TournamentDetailsNotifier
@@ -29,7 +26,6 @@ class _TeamScheduleManagementScreenState
     extends State<TournamentTeamScheduleManagementScreen> {
   final TeamScheduleService _service = TeamScheduleService();
   final TournamentService _tournamentService = TournamentService();
-  final ScoresService _scoresService = ScoresService();
   final TeamParticipantsService _teamParticipantsService =
       TeamParticipantsService();
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
@@ -47,11 +43,7 @@ class _TeamScheduleManagementScreenState
   int _currentPage = 0;
   int _itemsPerPage = 20;
   bool _isAddingMatch = false;
-  bool _isEditingMatch = false;
-  bool _isDeletingMatch = false;
-  bool _isEditingVenue = false;
-  bool _isEditingStatus = false;
-  bool _isDeletingAll = false;
+  final bool _isEditingMatch = false;
 
   @override
   void initState() {
@@ -1121,7 +1113,6 @@ class _TeamScheduleManagementScreenState
       teamDetails[team['name'] ?? ''] = team['name'] ?? 'Unknown Team';
     }
     setState(() {
-      _teamDetails = teamDetails;
     });
   }
 
@@ -1132,7 +1123,7 @@ class _TeamScheduleManagementScreenState
       final Map<String, String> userEmails = {};
       final Map<String, String> userNames = {};
       for (var doc in usersSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final userId = doc.id;
         final email = data['email'] ?? 'Unknown Email';
         final name = data['name'] ?? email.split('@')[0];
@@ -1171,37 +1162,25 @@ class _TeamScheduleManagementScreenState
                   'name': doc['name'] ?? 'Unknown Team',
                 });
               }
+            // ignore: empty_catches
             } catch (e) {
             }
           }
           return teams;
         }
       }
+    // ignore: empty_catches
     } catch (e) {
     }
     
     return [];
   }
 
-  int _getNextMatchNumber(String tournamentId) {
-    return DateTime.now().millisecondsSinceEpoch % 1000;
-  }
+ 
 
-  String _getTournamentSport(String tournamentId) {
-    return _tournamentDetailsNotifier.value[tournamentId]?['sport'] ??
-        'Unknown';
-  }
+ 
 
-  String _getTournamentCategory(String tournamentId) {
-    return _tournamentDetailsNotifier.value[tournamentId]?['category'] ??
-        'Unknown';
-  }
-
-  String _getTournamentGender(String tournamentId) {
-    return _tournamentDetailsNotifier.value[tournamentId]?['gender'] ??
-        'Unknown';
-  }
-
+  
   String _getUserNamesString(List<dynamic>? userIds) {
     if (userIds == null || userIds.isEmpty) {
       return 'Not assigned';
@@ -1234,6 +1213,7 @@ class _TeamScheduleManagementScreenState
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
+    // ignore: empty_catches
     } catch (e) {
     }
     }
@@ -1962,19 +1942,8 @@ class _TeamScheduleManagementScreenState
     );
   }
 
-  int _extractTeamCount(List<Map<String, dynamic>> schedules) {
-    if (schedules.isEmpty) return 0;
+  
 
-    final tournamentId = schedules.first['tournamentSetupId'];
-    final tournamentInfo = _tournamentDetailsNotifier.value[tournamentId];
-    if (tournamentInfo != null &&
-        tournamentInfo.containsKey('selectedTeamIds')) {
-      final teamIds = tournamentInfo['selectedTeamIds'] as List?;
-      if (teamIds != null) return teamIds.length;
-    }
-
-    return schedules.length + 1;
-  }
 
   String _getBracketInfo(int teamCount, int matchCount) {
     if (teamCount <= 0) return '';
@@ -2813,10 +2782,8 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                           tournamentDetails: tournamentDetails,
                           matches: originalSchedules,
                           onStatusChanged: () {
-                            if (onRefresh != null) {
-                              onRefresh!();
-                            }
-                          },
+                            onRefresh();
+                                                    },
                           onRefresh: onRefresh,
                         ),
                       ],
@@ -3500,29 +3467,7 @@ class _CompactMatchCard extends StatelessWidget {
   }
 }
 
-class _MiniButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  final IconData icon;
-  final Color color;
 
-  const _MiniButton({
-    required this.onPressed,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        child: Icon(icon, size: 10, color: color),
-      ),
-    );
-  }
-}
 
 class _ActionButton extends StatelessWidget {
   final VoidCallback onPressed;
@@ -3569,37 +3514,7 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _IconButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  final IconData icon;
-  final Color color;
-  final String tooltip;
 
-  const _IconButton({
-    required this.onPressed,
-    required this.icon,
-    required this.color,
-    required this.tooltip,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: IconButton(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 12, color: color),
-        tooltip: tooltip,
-        padding: const EdgeInsets.all(4),
-        constraints: const BoxConstraints(),
-      ),
-    );
-  }
-}
 
 class _DurationButton extends StatelessWidget {
   final String label;

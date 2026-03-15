@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:tabulation_systemv7/services/sports_event_service.dart';
@@ -30,7 +31,6 @@ class TournamentService {
           .doc(docId)
           .update({'status': status});
     } catch (e) {
-      print('Error updating tournament status: $e');
       rethrow;
     }
   }
@@ -124,7 +124,6 @@ Stream<QuerySnapshot> getTournamentStream() async* {
       });
       
     } catch (e) {
-      print('Error marking tournament as completed: $e');
       rethrow;
     }
   }
@@ -132,7 +131,6 @@ Stream<QuerySnapshot> getTournamentStream() async* {
   // IMPROVED: Check if all matches in tournament have scores
   Future<bool> doAllMatchesHaveScores(String tournamentId) async {
     try {
-      print('=== CHECKING SCORES FOR TOURNAMENT: $tournamentId ===');
       
       // Get tournament document ID
       final tournamentQuery = await FirebaseFirestore.instance
@@ -142,24 +140,19 @@ Stream<QuerySnapshot> getTournamentStream() async* {
           .get();
 
       if (tournamentQuery.docs.isEmpty) {
-        print('Tournament not found');
         return false;
       }
 
       final tournamentDocId = tournamentQuery.docs.first.id;
-      print('Tournament doc ID: $tournamentDocId');
       
       // Get all matches from team_schedules collection first (since your data shows matches there)
-      print('\n1. Checking team_schedules collection...');
       final teamSchedulesSnapshot = await FirebaseFirestore.instance
           .collection('team_schedules')
           .where('tournamentSetupId', isEqualTo: tournamentId)
           .get();
       
-      print('Found ${teamSchedulesSnapshot.docs.length} matches in team_schedules');
       
       if (teamSchedulesSnapshot.docs.isEmpty) {
-        print('No matches found in team_schedules');
         return false;
       }
       
@@ -180,10 +173,8 @@ Stream<QuerySnapshot> getTournamentStream() async* {
           if (scores != null) {
             if (scores is Map && scores.isNotEmpty) {
               hasScores = true;
-              print('✓ Has scores in match.scores field (Map): $scores');
             } else if (scores is List && scores.isNotEmpty) {
               hasScores = true;
-              print('✓ Has scores in match.scores field (List): $scores');
             }
           }
         }
@@ -191,7 +182,6 @@ Stream<QuerySnapshot> getTournamentStream() async* {
         // LOCATION 2: Check if match has winner/loser (indicates scores were entered)
         if (!hasScores && matchData.containsKey('winner') && matchData['winner'] != null) {
           hasScores = true;
-          print('✓ Has winner: ${matchData['winner']}');
         }
         
         // LOCATION 3: Check tournament's scores subcollection
@@ -205,7 +195,6 @@ Stream<QuerySnapshot> getTournamentStream() async* {
           
           if (tournamentScores.docs.isNotEmpty) {
             hasScores = true;
-            print('✓ Has scores in tournament.scores subcollection: ${tournamentScores.docs.length} scores');
           }
         }
         
@@ -218,7 +207,6 @@ Stream<QuerySnapshot> getTournamentStream() async* {
           
           if (mainScores.docs.isNotEmpty) {
             hasScores = true;
-            print('✓ Has scores in main scores collection: ${mainScores.docs.length} scores');
           }
         }
         
@@ -231,7 +219,6 @@ Stream<QuerySnapshot> getTournamentStream() async* {
               final value = matchData[field];
               if (value is num || (value is String && value.isNotEmpty)) {
                 hasScores = true;
-                print('✓ Has scores in field "$field": $value');
                 break;
               }
             }
@@ -241,20 +228,12 @@ Stream<QuerySnapshot> getTournamentStream() async* {
         if (hasScores) {
           matchesWithScores++;
         } else {
-          print('✗ NO SCORES found for match $matchId');
-          // Print all fields in the match for debugging
-          print('Match fields: ${matchData.keys}');
         }
       }
-      
-      print('\n=== SUMMARY ===');
-      print('Matches with scores: $matchesWithScores/${teamSchedulesSnapshot.docs.length}');
-      print('All matches have scores: ${matchesWithScores == teamSchedulesSnapshot.docs.length}');
       
       return matchesWithScores == teamSchedulesSnapshot.docs.length;
       
     } catch (e) {
-      print('Error checking scores: $e');
       return false;
     }
   }
@@ -262,8 +241,6 @@ Stream<QuerySnapshot> getTournamentStream() async* {
   // DEBUG METHOD: Check exactly where scores are stored
   Future<void> debugScoreLocations(String tournamentId) async {
     try {
-      print('\n=== SCORE LOCATION DEBUG ===');
-      print('Tournament ID: $tournamentId');
       
       // Get tournament document
       final tournamentQuery = await FirebaseFirestore.instance
@@ -273,78 +250,57 @@ Stream<QuerySnapshot> getTournamentStream() async* {
           .get();
 
       if (tournamentQuery.docs.isEmpty) {
-        print('Tournament not found');
         return;
       }
 
       final tournamentDoc = tournamentQuery.docs.first;
       final tournamentDocId = tournamentDoc.id;
-      print('Tournament doc ID: $tournamentDocId');
       
       // 1. Check team_schedules collection
-      print('\n1. CHECKING team_schedules collection:');
       final teamSchedules = await FirebaseFirestore.instance
           .collection('team_schedules')
           .where('tournamentSetupId', isEqualTo: tournamentId)
           .get();
       
-      print('Found ${teamSchedules.docs.length} matches');
       for (var doc in teamSchedules.docs) {
         final data = doc.data();
-        print('  Match ${doc.id}:');
-        print('    - Has scores field: ${data.containsKey('scores')}');
         if (data.containsKey('scores')) {
-          print('    - scores value: ${data['scores']}');
         }
-        print('    - Has winner field: ${data.containsKey('winner')} (${data['winner']})');
-        print('    - Available fields: ${data.keys}');
       }
       
       // 2. Check tournament matches subcollection
-      print('\n2. CHECKING tournament.matches subcollection:');
       final tournamentMatches = await FirebaseFirestore.instance
           .collection('tournaments')
           .doc(tournamentDocId)
           .collection('matches')
           .get();
       
-      print('Found ${tournamentMatches.docs.length} matches');
       for (var doc in tournamentMatches.docs) {
         final data = doc.data();
-        print('  Match ${doc.id}:');
-        print('    - Has scores field: ${data.containsKey('scores')}');
         if (data.containsKey('scores')) {
-          print('    - scores value: ${data['scores']}');
         }
       }
       
       // 3. Check tournament scores subcollection
-      print('\n3. CHECKING tournament.scores subcollection:');
       final tournamentScores = await FirebaseFirestore.instance
           .collection('tournaments')
           .doc(tournamentDocId)
           .collection('scores')
           .get();
       
-      print('Found ${tournamentScores.docs.length} scores');
       for (var doc in tournamentScores.docs) {
-        print('  Score ${doc.id}: ${doc.data()}');
       }
       
       // 4. Check main scores collection
-      print('\n4. CHECKING main scores collection:');
       final mainScores = await FirebaseFirestore.instance
           .collection('scores')
           .where('tournamentSetupId', isEqualTo: tournamentId)
           .get();
       
-      print('Found ${mainScores.docs.length} scores');
       for (var doc in mainScores.docs) {
-        print('  Score ${doc.id}: ${doc.data()}');
       }
       
     } catch (e) {
-      print('Debug error: $e');
     }
   }
 }

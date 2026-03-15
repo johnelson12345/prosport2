@@ -105,7 +105,7 @@ class _TournamentOfficialBracketDialogState
         return name;
       }
     } catch (e) {
-      print('Error fetching participant $participantId: $e');
+      // Silently handle missing participant
     }
     _teamNameCache[participantId] = participantId;
     return participantId; // Return ID if not found

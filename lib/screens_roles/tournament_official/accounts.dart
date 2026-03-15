@@ -295,16 +295,15 @@ class _TournamentOfficialAccountsScreenState
       try {
         setState(() => _isLoading = true);
 
-        debugPrint(
-            'Starting profile picture upload for user: ${_currentUser!.uid}');
+        // Starting profile picture upload
 
         // Convert image to base64
         final bytes = await image.readAsBytes();
         final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-        debugPrint('Image converted to base64 successfully');
+        // Image converted to base64 successfully
 
         // Update Firestore user document with base64 image
-        debugPrint('Updating Firestore user document...');
+        // Updating Firestore user document
         await FirebaseFirestore.instance
             .collection('users')
             .doc(_currentUser!.uid)
@@ -313,12 +312,12 @@ class _TournamentOfficialAccountsScreenState
 
         await _loadCurrentUser(); // Refresh user data
 
-        debugPrint('Profile picture update completed successfully');
+        // Profile picture update completed
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile picture updated successfully')),
         );
       } catch (e) {
-        debugPrint('Error updating profile picture: $e');
+        // Profile picture update error handled
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to update profile picture: $e')),
         );

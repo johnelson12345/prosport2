@@ -1,8 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/teams/team_schedule_management_dialog_enhanced.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_mngmt_dialog.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/bracket.dart';
 import 'package:tabulation_systemv7/services/scores.dart';
 import 'package:tabulation_systemv7/services/team_schedule_service.dart';
@@ -28,10 +26,8 @@ class _TeamScheduleManagementScreenState
     extends State<AdminTeamScheduleManagementScreen> {
   final TeamScheduleService _service = TeamScheduleService();
   final TournamentService _tournamentService = TournamentService();
-  final ScoresService _scoresService = ScoresService();
   final TeamParticipantsService _teamParticipantsService =
       TeamParticipantsService();
-  final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
   final DateFormat _displayDateFormat = DateFormat('MMM dd, yyyy hh:mm a');
 
   late TournamentDetailsNotifier _tournamentDetailsNotifier;
@@ -48,8 +44,6 @@ class _TeamScheduleManagementScreenState
   bool _isEditingMatch = false;
   bool _isDeletingMatch = false;
   bool _isEditingVenue = false;
-  bool _isEditingStatus = false;
-  bool _isDeletingAll = false;
 
   @override
   void initState() {
