@@ -65,7 +65,6 @@ class _TeamScheduleManagementScreenState
 
   void _getCurrentUser() async {
     try {
-      // Get current user from Firebase Auth
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         setState(() {
@@ -78,82 +77,134 @@ class _TeamScheduleManagementScreenState
   }
 
   void _loadTournamentData() async {
-  _tournamentService.getTournamentStream().listen((snapshot) {
-    final Map<String, String> names = {};
-    final Map<String, Map<String, dynamic>> details = {};
-    for (var doc in snapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      names[data['id']] = data['name'] ?? 'Unnamed Tournament';
-      details[data['id']] = {
-        'docId': doc.id,
-        'name': data['name'] ?? 'Unnamed Tournament',
-        'sportId': data['sportId'] ?? '',
-        'categoryId': data['categoryId'] ?? '',
-        'gender': data['gender'] ?? 'Unknown',
-        'venue': data['venue'] ?? 'Not specified',
-        'eliminationType': data['eliminationType'] ?? 'Single Elimination',
-        'assignedUsers': data['assignedUsers'] ?? [],
-        'status': data['status'] is String ? data['status'] : 'Active',
-        'selectedTeamIds': data['selectedTeamIds'] ?? [],
-        'isCompleted': data['isCompleted'] ?? false, // ADD THIS LINE
-        'completedAt': data['completedAt'], // ADD THIS LINE
-        'completedBy': data['completedBy'], // ADD THIS LINE
-        'lastUpdated': data['lastUpdated'], // ADD THIS LINE
-      };
-    }
-    setState(() {
-      _tournamentNames = names;
-      _tournamentDetailsNotifier.value = details;
+    _tournamentService.getTournamentStream().listen((snapshot) {
+      final Map<String, String> names = {};
+      final Map<String, Map<String, dynamic>> details = {};
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        names[data['id']] = data['name'] ?? 'Unnamed Tournament';
+        details[data['id']] = {
+          'docId': doc.id,
+          'name': data['name'] ?? 'Unnamed Tournament',
+          'sportId': data['sportId'] ?? '',
+          'categoryId': data['categoryId'] ?? '',
+          'gender': data['gender'] ?? 'Unknown',
+          'venue': data['venue'] ?? 'Not specified',
+          'eliminationType': data['eliminationType'] ?? 'Single Elimination',
+          'assignedUsers': data['assignedUsers'] ?? [],
+          'status': data['status'] is String ? data['status'] : 'Active',
+          'selectedTeamIds': data['selectedTeamIds'] ?? [],
+          'isCompleted': data['isCompleted'] ?? false,
+          'completedAt': data['completedAt'],
+          'completedBy': data['completedBy'],
+          'lastUpdated': data['lastUpdated'],
+          'matchups': data['matchups'] ?? [],
+        };
+      }
+      setState(() {
+        _tournamentNames = names;
+        _tournamentDetailsNotifier.value = details;
+      });
     });
-  });
-}
-// Add this method to force refresh tournament data
-Future<void> _refreshTournamentData() async {
-  print('Refreshing tournament data...');
-  setState(() {
-    // This will trigger a rebuild with existing data
-  });
-  
-  // Force a manual refresh of tournament data
-  try {
-    final snapshot = await _tournamentService.getTournamentStream().first;
-    final Map<String, String> names = {};
-    final Map<String, Map<String, dynamic>> details = {};
-    
-    for (var doc in snapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      names[data['id']] = data['name'] ?? 'Unnamed Tournament';
-      details[data['id']] = {
-        'docId': doc.id,
-        'name': data['name'] ?? 'Unnamed Tournament',
-        'sportId': data['sportId'] ?? '',
-        'categoryId': data['categoryId'] ?? '',
-        'gender': data['gender'] ?? 'Unknown',
-        'venue': data['venue'] ?? 'Not specified',
-        'eliminationType': data['eliminationType'] ?? 'Single Elimination',
-        'assignedUsers': data['assignedUsers'] ?? [],
-        'status': data['status'] is String ? data['status'] : 'Active',
-        'selectedTeamIds': data['selectedTeamIds'] ?? [],
-        'isCompleted': data['isCompleted'] ?? false,
-        'completedAt': data['completedAt'],
-        'completedBy': data['completedBy'],
-        'lastUpdated': data['lastUpdated'],
-      };
-    }
-    
-    setState(() {
-      _tournamentNames = names;
-      _tournamentDetailsNotifier.value = details;
-    });
-  } catch (e) {
-    print('Error refreshing tournament data: $e');
   }
-}
 
-  // SIMPLIFIED EDIT MATCH DIALOG with working loading indicator
+  // New method to get tournaments with matches directly from Firestore
+  Stream<List<Map<String, dynamic>>> _getTournamentsWithMatches() {
+    return FirebaseFirestore.instance
+        .collection('tournaments')
+        .snapshots()
+        .map((snapshot) {
+      List<Map<String, dynamic>> tournaments = [];
+      
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        
+        // Only include tournaments the user is assigned to
+        if (_currentUserId != null) {
+          final assignedUsers = data['assignedUsers'] as List<dynamic>? ?? [];
+          if (!assignedUsers.contains(_currentUserId)) {
+            continue;
+          }
+        }
+        
+        // Get matches from the matchups array
+        final matches = (data['matchups'] as List<dynamic>? ?? [])
+            .map((match) => match as Map<String, dynamic>)
+            .toList();
+        
+        // Add tournament info to each match
+        for (var match in matches) {
+          match['tournamentSetupId'] = data['id'];
+          match['tournamentName'] = data['name'] ?? 'Unnamed Tournament';
+          match['sport'] = data['sport'] ?? 'Unknown';
+          match['category'] = data['category'] ?? 'Unknown';
+          match['gender'] = data['gender'] ?? 'Unknown';
+          match['venue'] = data['venue'] ?? 'Not specified';
+        }
+        
+        tournaments.add({
+          'id': data['id'],
+          'name': data['name'] ?? 'Unnamed Tournament',
+          'sport': data['sport'] ?? 'Unknown',
+          'category': data['category'] ?? 'Unknown',
+          'gender': data['gender'] ?? 'Unknown',
+          'venue': data['venue'] ?? 'Not specified',
+          'status': data['status'] ?? 'active',
+          'assignedUsers': data['assignedUsers'] ?? [],
+          'selectedTeamIds': data['selectedTeamIds'] ?? [],
+          'matchups': matches,
+          'totalMatches': data['totalMatches'] ?? matches.length,
+          'isCompleted': data['isCompleted'] ?? false,
+        });
+      }
+      
+      return tournaments;
+    });
+  }
+
+  Future<void> _refreshTournamentData() async {
+    print('Refreshing tournament data...');
+    setState(() {});
+    
+    try {
+      final snapshot = await _tournamentService.getTournamentStream().first;
+      final Map<String, String> names = {};
+      final Map<String, Map<String, dynamic>> details = {};
+      
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        names[data['id']] = data['name'] ?? 'Unnamed Tournament';
+        details[data['id']] = {
+          'docId': doc.id,
+          'name': data['name'] ?? 'Unnamed Tournament',
+          'sportId': data['sportId'] ?? '',
+          'categoryId': data['categoryId'] ?? '',
+          'gender': data['gender'] ?? 'Unknown',
+          'venue': data['venue'] ?? 'Not specified',
+          'eliminationType': data['eliminationType'] ?? 'Single Elimination',
+          'assignedUsers': data['assignedUsers'] ?? [],
+          'status': data['status'] is String ? data['status'] : 'Active',
+          'selectedTeamIds': data['selectedTeamIds'] ?? [],
+          'isCompleted': data['isCompleted'] ?? false,
+          'completedAt': data['completedAt'],
+          'completedBy': data['completedBy'],
+          'lastUpdated': data['lastUpdated'],
+          'matchups': data['matchups'] ?? [],
+        };
+      }
+      
+      setState(() {
+        _tournamentNames = names;
+        _tournamentDetailsNotifier.value = details;
+      });
+    } catch (e) {
+      print('Error refreshing tournament data: $e');
+    }
+  }
+
   Future<void> _showEditMatchDialog(
       String tournamentId, Map<String, dynamic> match) async {
-    if (_isEditingMatch) return; // Prevent multiple clicks
+    if (_isEditingMatch) return;
 
     final tournamentTeams = await _getTournamentTeams(tournamentId);
 
@@ -189,7 +240,6 @@ Future<void> _refreshTournamentData() async {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Form fields (disabled when processing)
                     Opacity(
                       opacity: isProcessing ? 0.5 : 1.0,
                       child: AbsorbPointer(
@@ -199,7 +249,6 @@ Future<void> _refreshTournamentData() async {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Team 1 Selection
                               const Text('Team 1',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w500,
@@ -236,7 +285,6 @@ Future<void> _refreshTournamentData() async {
 
                               const SizedBox(height: 12),
 
-                              // Team 2 Selection
                               const Text('Team 2',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w500,
@@ -275,7 +323,6 @@ Future<void> _refreshTournamentData() async {
                               const Divider(),
                               const SizedBox(height: 8),
 
-                              // Date & Time Selection
                               const Text('Schedule',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w500,
@@ -350,7 +397,6 @@ Future<void> _refreshTournamentData() async {
                       ),
                     ),
 
-                    // Loading indicator
                     if (isProcessing)
                       const Padding(
                         padding: EdgeInsets.only(top: 20, bottom: 8),
@@ -410,21 +456,38 @@ Future<void> _refreshTournamentData() async {
                             final team2 = tournamentTeams
                                 .firstWhere((t) => t['id'] == selectedTeam2);
 
-                            final updatedMatch = {
-                              ...match,
-                              'team1': team1,
-                              'team2': team2,
-                              'team1Id': team1['id'],
-                              'team2Id': team2['id'],
-                              'team1Name': team1['name'],
-                              'team2Name': team2['name'],
-                              'dateTime': selectedDateTime!.toIso8601String(),
-                              'startTime': selectedDateTime!.toIso8601String(),
-                              'isFixedMatch': true,
-                            };
+                            // Update the match in the tournament's matchups array
+                            final tournamentQuery = await FirebaseFirestore.instance
+                                .collection('tournaments')
+                                .where('id', isEqualTo: tournamentId)
+                                .limit(1)
+                                .get();
 
-                            await _service.updateTeamSchedule(
-                                match['id'], updatedMatch);
+                            if (tournamentQuery.docs.isNotEmpty) {
+                              final tournamentDoc = tournamentQuery.docs.first;
+                              final tournamentData = tournamentDoc.data();
+                              final matchups = List<Map<String, dynamic>>.from(tournamentData['matchups'] ?? []);
+                              
+                              final matchIndex = matchups.indexWhere((m) => m['id'] == match['id']);
+                              if (matchIndex != -1) {
+                                matchups[matchIndex] = {
+                                  ...matchups[matchIndex],
+                                  'team1': team1,
+                                  'team2': team2,
+                                  'team1Id': team1['id'],
+                                  'team2Id': team2['id'],
+                                  'team1Name': team1['name'],
+                                  'team2Name': team2['name'],
+                                  'dateTime': _dateFormat.format(selectedDateTime!),
+                                  'startTime': _dateFormat.format(selectedDateTime!),
+                                };
+                                
+                                await tournamentDoc.reference.update({
+                                  'matchups': matchups,
+                                  'updatedAt': FieldValue.serverTimestamp(),
+                                });
+                              }
+                            }
 
                             if (context.mounted) {
                               Navigator.pop(context);
@@ -511,9 +574,25 @@ Future<void> _refreshTournamentData() async {
       return;
     }
 
-    final currentVenue =
-        _tournamentDetailsNotifier.value[tournamentId]?['venue'] ?? 'Court 1';
-
+    // Get current tournament data
+    final tournamentQuery = await FirebaseFirestore.instance
+        .collection('tournaments')
+        .where('id', isEqualTo: tournamentId)
+        .limit(1)
+        .get();
+    
+    if (tournamentQuery.docs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tournament not found')),
+      );
+      return;
+    }
+    
+    final tournamentDoc = tournamentQuery.docs.first;
+    final tournamentData = tournamentDoc.data();
+    final currentVenue = tournamentData['venue'] ?? 'Court 1';
+    final currentMatchups = List<Map<String, dynamic>>.from(tournamentData['matchups'] ?? []);
+    
     String? selectedTeam1;
     String? selectedTeam2;
     DateTime? startDateTime;
@@ -536,12 +615,11 @@ Future<void> _refreshTournamentData() async {
                 borderRadius: BorderRadius.circular(16),
               ),
               content: Container(
-                width: 450, // Wider to accommodate two time pickers
+                width: 450,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Wrap everything in AbsorbPointer and Opacity
                     AbsorbPointer(
                       absorbing: isProcessing,
                       child: Opacity(
@@ -551,7 +629,6 @@ Future<void> _refreshTournamentData() async {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Team 1 Selection
                               const Text('Team 1',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w500,
@@ -559,8 +636,7 @@ Future<void> _refreshTournamentData() async {
                               const SizedBox(height: 4),
                               Container(
                                 decoration: BoxDecoration(
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
+                                  border: Border.all(color: Colors.grey.shade300),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: DropdownButtonFormField<String>(
@@ -588,7 +664,6 @@ Future<void> _refreshTournamentData() async {
 
                               const SizedBox(height: 12),
 
-                              // Team 2 Selection
                               const Text('Team 2',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w500,
@@ -596,8 +671,7 @@ Future<void> _refreshTournamentData() async {
                               const SizedBox(height: 4),
                               Container(
                                 decoration: BoxDecoration(
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
+                                  border: Border.all(color: Colors.grey.shade300),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: DropdownButtonFormField<String>(
@@ -627,14 +701,12 @@ Future<void> _refreshTournamentData() async {
                               const Divider(),
                               const SizedBox(height: 8),
 
-                              // Schedule Section Header
                               const Text('Schedule',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w500,
                                       fontSize: 13)),
                               const SizedBox(height: 12),
 
-                              // START DATE & TIME
                               Container(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 child: Column(
@@ -712,7 +784,6 @@ Future<void> _refreshTournamentData() async {
                                 ),
                               ),
 
-                              // END DATE & TIME
                               Container(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 child: Column(
@@ -791,7 +862,6 @@ Future<void> _refreshTournamentData() async {
                                 ),
                               ),
 
-                              // Quick set duration buttons (optional helper)
                               if (startDateTime != null)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
@@ -836,15 +906,13 @@ Future<void> _refreshTournamentData() async {
                                   ),
                                 ),
 
-                              // Show venue being used
                               const SizedBox(height: 12),
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: Colors.blue.shade50,
                                   borderRadius: BorderRadius.circular(8),
-                                  border:
-                                      Border.all(color: Colors.blue.shade200),
+                                  border: Border.all(color: Colors.blue.shade200),
                                 ),
                                 child: Row(
                                   children: [
@@ -870,7 +938,6 @@ Future<void> _refreshTournamentData() async {
                       ),
                     ),
 
-                    // Loading indicator
                     if (isProcessing)
                       const Padding(
                         padding: EdgeInsets.only(top: 20, bottom: 8),
@@ -900,7 +967,6 @@ Future<void> _refreshTournamentData() async {
                   onPressed: isProcessing
                       ? null
                       : () async {
-                          // Validate inputs
                           if (selectedTeam1 == null ||
                               selectedTeam2 == null ||
                               startDateTime == null ||
@@ -922,7 +988,6 @@ Future<void> _refreshTournamentData() async {
                             return;
                           }
 
-// Add null checks with ! since we've already validated they're not null
                           if (endDateTime!.isBefore(startDateTime!)) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -932,7 +997,6 @@ Future<void> _refreshTournamentData() async {
                             return;
                           }
 
-                          // Show loading state
                           setDialogState(() {
                             isProcessing = true;
                           });
@@ -943,43 +1007,43 @@ Future<void> _refreshTournamentData() async {
                             final team2 = tournamentTeams
                                 .firstWhere((t) => t['id'] == selectedTeam2);
 
-                            // Format dates as dd/MM/yyyy HH:mm (matching your data structure)
                             final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
 
                             final newMatch = {
-                              'id': const Uuid().v4(),
-                              'matchNumber': _getNextMatchNumber(tournamentId),
+                              'id': 'match_${DateTime.now().millisecondsSinceEpoch}',
+                              'matchNumber': currentMatchups.length + 1,
                               'round': 1,
+                              'bracket': 'single',
+                              'matchType': 'regular',
+                              'status': 'scheduled',
                               'team1': team1,
                               'team2': team2,
                               'team1Id': team1['id'],
                               'team2Id': team2['id'],
                               'team1Name': team1['name'],
                               'team2Name': team2['name'],
-                              'dateTime': dateFormat
-                                  .format(startDateTime!), // Start time
+                              'dateTime': dateFormat.format(startDateTime!),
                               'startTime': dateFormat.format(startDateTime!),
                               'endTime': dateFormat.format(endDateTime!),
-                              'tournamentSetupId': tournamentId,
-                              'tournamentName':
-                                  _tournamentNames[tournamentId] ??
-                                      'Tournament',
-                              'sport': _getTournamentSport(tournamentId),
-                              'category': _getTournamentCategory(tournamentId),
-                              'gender': _getTournamentGender(tournamentId),
+                              'sport': tournamentData['sport'] ?? 'Unknown',
+                              'category': tournamentData['category'] ?? 'Unknown',
+                              'gender': tournamentData['gender'] ?? 'Unknown',
                               'venue': currentVenue,
-                              'type': 'regular',
-                              'status': 'scheduled',
-                              'isFixedMatch': true,
+                              'scores': {},
                               'winner': null,
                               'loser': null,
-                              'scores': {},
                             };
 
-                            await _service.createTeamSchedule(newMatch);
+                            currentMatchups.add(newMatch);
+                            
+                            await tournamentDoc.reference.update({
+                              'matchups': currentMatchups,
+                              'totalMatches': currentMatchups.length,
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
 
                             if (context.mounted) {
-                              Navigator.pop(context); // Close dialog
+                              Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                     content: Text('Match added successfully'),
@@ -1085,10 +1149,7 @@ Future<void> _refreshTournamentData() async {
     } catch (e) {}
   }
 
-  // Helper methods for tournament data
-  Future<List<Map<String, dynamic>>> _getTournamentTeams(
-      String tournamentId) async {
-    // Try to get tournament data directly from Firestore
+  Future<List<Map<String, dynamic>>> _getTournamentTeams(String tournamentId) async {
     try {
       final tournamentQuery = await FirebaseFirestore.instance
           .collection('tournaments')
@@ -1097,18 +1158,8 @@ Future<void> _refreshTournamentData() async {
 
       if (tournamentQuery.docs.isNotEmpty) {
         final tournamentData = tournamentQuery.docs.first.data();
-
-        // Check for team IDs in various possible field names
-        List<String> teamIds = [];
-
-        if (tournamentData.containsKey('selectedTeamIds')) {
-          teamIds = List<String>.from(tournamentData['selectedTeamIds'] ?? []);
-        } else if (tournamentData.containsKey('teamIds')) {
-          teamIds = List<String>.from(tournamentData['teamIds'] ?? []);
-        } else if (tournamentData.containsKey('teams')) {
-          teamIds = List<String>.from(tournamentData['teams'] ?? []);
-        }
-
+        final teamIds = List<String>.from(tournamentData['selectedTeamIds'] ?? []);
+        
         if (teamIds.isNotEmpty) {
           final teams = <Map<String, dynamic>>[];
           for (var teamId in teamIds) {
@@ -1122,48 +1173,22 @@ Future<void> _refreshTournamentData() async {
                   'id': doc.id,
                   'name': doc['name'] ?? 'Unknown Team',
                 });
-              } else {}
-            } catch (e) {}
+              }
+            } catch (e) {
+              print('Error getting team $teamId: $e');
+            }
           }
           return teams;
         }
       }
-    } catch (e) {}
-
-    // Fallback to notifier data
-    final tournamentInfo = _tournamentDetailsNotifier.value[tournamentId];
-    if (tournamentInfo == null) {
-      return [];
+    } catch (e) {
+      print('Error getting tournament teams: $e');
     }
-
-    final teamIds = tournamentInfo['selectedTeamIds'] as List? ?? [];
-
-    if (teamIds.isEmpty) {
-      return [];
-    }
-
-    final teams = <Map<String, dynamic>>[];
-    for (var teamId in teamIds) {
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('participants')
-            .doc(teamId)
-            .get();
-        if (doc.exists) {
-          teams.add({
-            'id': doc.id,
-            'name': doc['name'] ?? 'Unknown Team',
-          });
-        } else {}
-      } catch (e) {}
-    }
-
-    return teams;
+    
+    return [];
   }
 
   int _getNextMatchNumber(String tournamentId) {
-    // This would need to be implemented to get the next match number
-    // For now, return a temporary value
     return DateTime.now().millisecondsSinceEpoch % 1000;
   }
 
@@ -1195,25 +1220,42 @@ Future<void> _refreshTournamentData() async {
   }
 
   void _deleteTeamSchedule(String id) async {
-    await _service.deleteTeamSchedule(id);
+    // Delete match from tournament's matchups array
+    try {
+      // Find which tournament contains this match
+      final tournamentsQuery = await FirebaseFirestore.instance
+          .collection('tournaments')
+          .where('matchups', arrayContains: {'id': id})
+          .get();
+      
+      for (var doc in tournamentsQuery.docs) {
+        final data = doc.data();
+        final matchups = List<Map<String, dynamic>>.from(data['matchups'] ?? []);
+        matchups.removeWhere((match) => match['id'] == id);
+        
+        await doc.reference.update({
+          'matchups': matchups,
+          'totalMatches': matchups.length,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      print('Error deleting match: $e');
+    }
   }
 
-  // Organize matches in proper bracket format based on team count
   List<Map<String, dynamic>> _organizeMatchesInBracketFormat(
       List<Map<String, dynamic>> matches) {
     if (matches.isEmpty) return [];
 
-    // Sort by match number
     matches.sort((a, b) {
       final aNum = a['matchNumber'] ?? 999;
       final bNum = b['matchNumber'] ?? 999;
       return aNum.compareTo(bNum);
     });
 
-    // Check if using new structured format
     final sampleMatch = matches.first;
     if (sampleMatch.containsKey('team1') && sampleMatch.containsKey('team2')) {
-      // New format - add round information based on bracket structure
       return matches.map((match) {
         final round = match['round'] ??
             _calculateRound(match['matchNumber'], matches.length);
@@ -1225,7 +1267,6 @@ Future<void> _refreshTournamentData() async {
       }).toList();
     }
 
-    // Legacy format
     return matches.map((match) {
       final teams = List<String>.from(match['teams'] ?? []);
       final isWinnerMatch = teams.any((t) =>
@@ -1239,25 +1280,20 @@ Future<void> _refreshTournamentData() async {
     }).toList();
   }
 
-  // Calculate round based on match number and total matches
   int _calculateRound(int? matchNumber, int totalMatches) {
     if (matchNumber == null) return 1;
 
     if (totalMatches <= 3) {
-      // 2-4 teams: Round 1 = matches 1-2, Round 2 = match 3
       return matchNumber <= 2 ? 1 : 2;
     } else if (totalMatches <= 5) {
-      // 5-6 teams: Round 1 = matches 1-2, Round 2 = matches 3-4, Round 3 = match 5
       if (matchNumber <= 2) return 1;
       if (matchNumber <= 4) return 2;
       return 3;
     } else if (totalMatches <= 7) {
-      // 7-8 teams: Round 1 = matches 1-4, Round 2 = matches 5-6, Round 3 = match 7
       if (matchNumber <= 4) return 1;
       if (matchNumber <= 6) return 2;
       return 3;
     } else {
-      // 9-16 teams: More complex calculation
       int matchesInRound1 = totalMatches - (1 << (totalMatches.bitLength - 2));
       if (matchNumber <= matchesInRound1) return 1;
       return 2 +
@@ -1265,7 +1301,6 @@ Future<void> _refreshTournamentData() async {
     }
   }
 
-  // Get bracket type based on match data
   String _getBracketType(Map<String, dynamic> match) {
     if (match.containsKey('bracket')) return match['bracket'];
     if (match.containsKey('isGrandFinals')) return 'finals';
@@ -1377,7 +1412,6 @@ Future<void> _refreshTournamentData() async {
                   },
                 ),
               ),
-            // Add items per page selector
             const SizedBox(width: 12),
             Container(
               margin: const EdgeInsets.symmetric(vertical: 12),
@@ -1425,7 +1459,7 @@ Future<void> _refreshTournamentData() async {
                           : 1;
 
           return StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _service.getAllTeamSchedules(limit: 10000),
+            stream: _getTournamentsWithMatches(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return Center(
@@ -1448,8 +1482,8 @@ Future<void> _refreshTournamentData() async {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final teamSchedules = snapshot.data!;
-              if (teamSchedules.isEmpty) {
+              final tournaments = snapshot.data!;
+              if (tournaments.isEmpty) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1458,7 +1492,7 @@ Future<void> _refreshTournamentData() async {
                           size: 80, color: Colors.grey.shade300),
                       const SizedBox(height: 16),
                       const Text(
-                        'No team schedules found.',
+                        'No tournaments found.',
                         style: TextStyle(fontSize: 18, color: Colors.grey),
                       ),
                       const SizedBox(height: 24),
@@ -1468,99 +1502,63 @@ Future<void> _refreshTournamentData() async {
               }
 
               // Apply search filter
-              var filteredSchedules = teamSchedules.where((schedule) {
-                final tournamentName =
-                    _tournamentNames[schedule['tournamentSetupId']]
-                            ?.toLowerCase() ??
-                        '';
-
+              var filteredTournaments = tournaments.where((tournament) {
+                final tournamentName = tournament['name']?.toLowerCase() ?? '';
+                
                 String teamList = '';
-                if (schedule.containsKey('teams')) {
-                  teamList =
-                      (schedule['teams'] as List?)?.join(" ").toLowerCase() ??
-                          '';
-                } else if (schedule.containsKey('team1') &&
-                    schedule.containsKey('team2')) {
-                  final team1 = schedule['team1'] as Map<String, dynamic>?;
-                  final team2 = schedule['team2'] as Map<String, dynamic>?;
-                  teamList = '${team1?['name'] ?? ''} ${team2?['name'] ?? ''}'
-                      .toLowerCase();
+                final matchups = tournament['matchups'] as List<dynamic>? ?? [];
+                for (var match in matchups) {
+                  final matchMap = match as Map<String, dynamic>;
+                  final team1 = matchMap['team1Name'] ?? '';
+                  final team2 = matchMap['team2Name'] ?? '';
+                  teamList += '$team1 $team2 ';
                 }
 
                 return tournamentName.contains(_searchQuery) ||
-                    teamList.contains(_searchQuery);
+                    teamList.toLowerCase().contains(_searchQuery);
               }).toList();
 
               // Apply date filter
               if (_selectedDate != null) {
-                filteredSchedules = filteredSchedules.where((schedule) {
-                  try {
-                    final dateTimeStr =
-                        schedule['dateTime'] ?? schedule['startTime'];
-                    if (dateTimeStr == null) return false;
-                    final date = DateTime.parse(dateTimeStr.toString());
-                    return date.year == _selectedDate!.year &&
-                        date.month == _selectedDate!.month &&
-                        date.day == _selectedDate!.day;
-                  } catch (e) {
-                    return false;
+                filteredTournaments = filteredTournaments.where((tournament) {
+                  final matchups = tournament['matchups'] as List<dynamic>? ?? [];
+                  for (var match in matchups) {
+                    final matchMap = match as Map<String, dynamic>;
+                    try {
+                      final dateTimeStr = matchMap['dateTime'] ?? matchMap['startTime'];
+                      if (dateTimeStr != null) {
+                        final date = _parseDateTime(dateTimeStr.toString());
+                        if (date.year == _selectedDate!.year &&
+                            date.month == _selectedDate!.month &&
+                            date.day == _selectedDate!.day) {
+                          return true;
+                        }
+                      }
+                    } catch (e) {}
                   }
+                  return false;
                 }).toList();
               }
 
-              // Group schedules by tournament
-              Map<String, List<Map<String, dynamic>>> groupedSchedules = {};
-              for (var schedule in filteredSchedules) {
-                final tournamentId =
-                    schedule['tournamentSetupId'] ?? 'Unknown Tournament';
+              final totalPages = (filteredTournaments.length / _itemsPerPage).ceil();
 
-                // Check if user is assigned to this tournament
-                bool isUserAssigned = false;
-
-                // If we have current user ID, check if they're assigned
-                if (_currentUserId != null) {
-                  final tournamentInfo =
-                      _tournamentDetailsNotifier.value[tournamentId];
-                  if (tournamentInfo != null) {
-                    final assignedUsers =
-                        tournamentInfo['assignedUsers'] as List<dynamic>? ?? [];
-                    isUserAssigned = assignedUsers.contains(_currentUserId);
-                  }
-                } else {
-                  // If no user ID found, show all tournaments (or you can change this to false)
-                  isUserAssigned = true;
-                }
-
-                // Only add to grouped schedules if user is assigned
-                if (isUserAssigned) {
-                  groupedSchedules
-                      .putIfAbsent(tournamentId, () => [])
-                      .add(schedule);
-                }
-              }
-
-              final allEntries = groupedSchedules.entries.toList();
-              final totalPages = (allEntries.length / _itemsPerPage).ceil();
-
-              // Ensure current page is valid
               if (_currentPage >= totalPages && totalPages > 0) {
                 _currentPage = totalPages - 1;
               }
 
               final startIndex = _currentPage * _itemsPerPage;
-              final endIndex = (startIndex + _itemsPerPage) > allEntries.length
-                  ? allEntries.length
+              final endIndex = (startIndex + _itemsPerPage) > filteredTournaments.length
+                  ? filteredTournaments.length
                   : startIndex + _itemsPerPage;
 
-              final paginatedEntries = allEntries.isEmpty
+              final paginatedTournaments = filteredTournaments.isEmpty
                   ? []
-                  : allEntries.sublist(
-                      startIndex > allEntries.length ? 0 : startIndex,
+                  : filteredTournaments.sublist(
+                      startIndex > filteredTournaments.length ? 0 : startIndex,
                       endIndex);
 
               return Column(
                 children: [
-                  // Pagination info and controls
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1573,7 +1571,6 @@ Future<void> _refreshTournamentData() async {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Showing X-Y of Z entries
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 6),
@@ -1582,7 +1579,7 @@ Future<void> _refreshTournamentData() async {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            'Showing ${allEntries.isEmpty ? 0 : startIndex + 1}-${allEntries.isEmpty ? 0 : endIndex} of ${allEntries.length} tournaments',
+                            'Showing ${filteredTournaments.isEmpty ? 0 : startIndex + 1}-${filteredTournaments.isEmpty ? 0 : endIndex} of ${filteredTournaments.length} tournaments',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -1591,10 +1588,8 @@ Future<void> _refreshTournamentData() async {
                           ),
                         ),
 
-                        // Pagination controls
                         Row(
                           children: [
-                            // Previous button
                             _buildPaginationButton(
                               icon: Icons.chevron_left,
                               onPressed: _currentPage > 0
@@ -1609,14 +1604,12 @@ Future<void> _refreshTournamentData() async {
 
                             const SizedBox(width: 8),
 
-                            // Page numbers
                             if (totalPages > 1) ...[
                               _buildPageNumbers(totalPages, _currentPage),
                             ],
 
                             const SizedBox(width: 8),
 
-                            // Next button
                             _buildPaginationButton(
                               icon: Icons.chevron_right,
                               onPressed: _currentPage < totalPages - 1
@@ -1632,7 +1625,6 @@ Future<void> _refreshTournamentData() async {
                           ],
                         ),
 
-                        // Items per page indicator
                         Text(
                           '${_itemsPerPage} items per page',
                           style: TextStyle(
@@ -1644,140 +1636,125 @@ Future<void> _refreshTournamentData() async {
                     ),
                   ),
 
-                  // Grid content
-                  // In the build method, find where you have the GridView and fix the RefreshIndicator:
+                  Expanded(
+                    child: paginatedTournaments.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.search_off,
+                                    size: 64, color: Colors.grey.shade400),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No tournaments match your filters',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                if (_searchQuery.isNotEmpty ||
+                                    _selectedDate != null)
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _searchQuery = "";
+                                        _selectedDate = null;
+                                        _currentPage = 0;
+                                      });
+                                    },
+                                    child: const Text('Clear filters'),
+                                  ),
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _refreshTournamentData,
+                            child: GridView.builder(
+                              padding: const EdgeInsets.all(16),
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: crossAxisCount,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                                childAspectRatio: 0.75,
+                              ),
+                              itemCount: paginatedTournaments.length,
+                              itemBuilder: (context, index) {
+                                final tournament = paginatedTournaments[index];
+                                final tournamentId = tournament['id'];
+                                final tournamentName = tournament['name'] ?? 'Unnamed Tournament';
+                                final matchups = tournament['matchups'] as List<dynamic>? ?? [];
+                                final schedules = matchups.map((m) => m as Map<String, dynamic>).toList();
 
-Expanded(
-  child: paginatedEntries.isEmpty
-      ? Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.search_off,
-                  size: 64, color: Colors.grey.shade400),
-              const SizedBox(height: 16),
-              Text(
-                'No tournaments match your filters',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-              if (_searchQuery.isNotEmpty ||
-                  _selectedDate != null)
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _searchQuery = "";
-                      _selectedDate = null;
-                      _currentPage = 0;
-                    });
-                  },
-                  child: const Text('Clear filters'),
-                ),
-            ],
-          ),
-        )
-      : RefreshIndicator(
-          onRefresh: _refreshTournamentData,
-          child: GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.75,
-            ),
-            itemCount: paginatedEntries.length,
-            itemBuilder: (context, index) {
-              final entry = paginatedEntries[index];
-              final tournamentId = entry.key;
-              final schedules = entry.value;
-              final tournamentName =
-                  _tournamentNames[tournamentId] ?? tournamentId;
+                                final organizedMatches = _organizeMatchesInBracketFormat(schedules);
 
-              final organizedMatches =
-                  _organizeMatchesInBracketFormat(schedules);
+                                final sportName = tournament['sport'] ?? 'Unknown Sport';
+                                final categoryName = tournament['category'] ?? 'Unknown Category';
 
-              final sportName = schedules.isNotEmpty
-                  ? schedules.first['sport'] ??
-                      schedules.first['sportName'] ??
-                      'Unknown Sport'
-                  : 'Unknown Sport';
-              final categoryName = schedules.isNotEmpty
-                  ? schedules.first['category'] ??
-                      schedules.first['categoryName'] ??
-                      'Unknown Category'
-                  : 'Unknown Category';
+                                final sportIcon = _getSportIcon(sportName);
+                                final categoryColor = _getCategoryColor(categoryName);
 
-              final sportIcon = _getSportIcon(sportName);
-              final categoryColor = _getCategoryColor(categoryName);
+                                final teamCount = tournament['selectedTeamIds']?.length ?? 0;
+                                final bracketInfo = _getBracketInfo(teamCount, schedules.length);
 
-              // Calculate bracket info
-              final teamCount = _extractTeamCount(schedules);
-              final bracketInfo =
-                  _getBracketInfo(teamCount, schedules.length);
+                                return _BracketStyleTournamentCard(
+                                  tournamentId: tournamentId,
+                                  tournamentName: tournamentName,
+                                  sportIcon: sportIcon,
+                                  sportName: sportName,
+                                  categoryName: categoryName,
+                                  categoryColor: categoryColor,
+                                  schedules: organizedMatches,
+                                  originalSchedules: schedules,
+                                  tournamentDetails: tournament,
+                                  teamCount: teamCount,
+                                  bracketInfo: bracketInfo,
+                                  onEditVenue: () => _editVenue(tournamentId),
+                                  onEditStatus: () => _editStatus(tournamentId),
+                                  onDeleteAll: () => _deleteAllTournamentData(tournamentId),
+                                  onAddMatch: () async {
+                                    await _showAddMatchDialog(tournamentId);
+                                  },
+                                  onEditMatch: (item) => _showEditMatchDialog(tournamentId, item),
+                                  onDeleteMatch: (item) async {
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Confirm Delete'),
+                                        content: const Text(
+                                            'Are you sure you want to delete this schedule?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context, false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context, true),
+                                            child: const Text('Delete'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirmed == true) {
+                                      _deleteTeamSchedule(item['id']);
+                                    }
+                                  },
+                                  onShowBracket: () {
+                                    TournamentOfficialBracketDialog.show(
+                                      context: context,
+                                      tournamentId: tournamentId,
+                                      tournamentName: tournamentName,
+                                    );
+                                  },
+                                  formatDateTime: _formatDateTime,
+                                  formatEndDateTime: _formatEndDateTime,
+                                  getUserNamesString: _getUserNamesString,
+                                  onRefresh: _refreshTournamentData,
+                                );
+                              },
+                            ),
+                          ),
+                  ),
 
-              return _BracketStyleTournamentCard(
-                tournamentId: tournamentId,
-                tournamentName: tournamentName,
-                sportIcon: sportIcon,
-                sportName: sportName,
-                categoryName: categoryName,
-                categoryColor: categoryColor,
-                schedules: organizedMatches,
-                originalSchedules: schedules,
-                tournamentDetails: _tournamentDetailsNotifier.value[tournamentId],
-                teamCount: teamCount,
-                bracketInfo: bracketInfo,
-                onEditVenue: () => _editVenue(tournamentId),
-                onEditStatus: () => _editStatus(tournamentId),
-                onDeleteAll: () => _deleteAllTournamentData(tournamentId),
-                onAddMatch: () async {
-                  await _showAddMatchDialog(tournamentId);
-                },
-                onEditMatch: (item) => _showEditMatchDialog(tournamentId, item),
-                onDeleteMatch: (item) async {
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Confirm Delete'),
-                      content: const Text(
-                          'Are you sure you want to delete this schedule?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Delete'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirmed == true) {
-                    _deleteTeamSchedule(item['id']);
-                  }
-                },
-                onShowBracket: () {
-                  TournamentOfficialBracketDialog.show(
-                    context: context,
-                    tournamentId: tournamentId,
-                    tournamentName: tournamentName,
-                  );
-                },
-                formatDateTime: _formatDateTime,
-                formatEndDateTime: _formatEndDateTime,
-                getUserNamesString: _getUserNamesString,
-                onRefresh: _refreshTournamentData, // Pass the refresh function
-              );
-            },
-          ),
-        ),
-),
-
-                  // Bottom pagination (optional - you can remove if not needed)
                   if (totalPages > 1)
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -1790,7 +1767,6 @@ Expanded(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Simple bottom pagination
                           IconButton(
                             onPressed: _currentPage > 0
                                 ? () {
@@ -1842,7 +1818,28 @@ Expanded(
     );
   }
 
-// Helper method to build pagination buttons
+  DateTime _parseDateTime(String dateTimeString) {
+    try {
+      if (dateTimeString.contains('T')) {
+        return DateTime.parse(dateTimeString);
+      } else if (dateTimeString.contains('/')) {
+        final parts = dateTimeString.split(' ');
+        if (parts.length == 2) {
+          final dateParts = parts[0].split('/');
+          final timeParts = parts[1].split(':');
+          return DateTime(
+            int.parse(dateParts[2]),
+            int.parse(dateParts[1]),
+            int.parse(dateParts[0]),
+            int.parse(timeParts[0]),
+            int.parse(timeParts[1]),
+          );
+        }
+      }
+    } catch (e) {}
+    return DateTime.now();
+  }
+
   Widget _buildPaginationButton({
     required IconData icon,
     required VoidCallback? onPressed,
@@ -1888,15 +1885,12 @@ Expanded(
     );
   }
 
-// Helper method to build page number buttons
   Widget _buildPageNumbers(int totalPages, int currentPage) {
     List<Widget> pageButtons = [];
 
-    // Always show first page
     pageButtons.add(_buildPageNumberButton(1, currentPage == 0));
 
     if (totalPages > 7) {
-      // Show ellipsis if needed
       if (currentPage > 3) {
         pageButtons.add(
           Container(
@@ -1907,7 +1901,6 @@ Expanded(
         );
       }
 
-      // Show pages around current page
       int start = currentPage > 3 ? currentPage - 1 : 2;
       int end = currentPage < totalPages - 4 ? currentPage + 1 : totalPages - 2;
 
@@ -1917,7 +1910,6 @@ Expanded(
         }
       }
 
-      // Show ellipsis before last page
       if (currentPage < totalPages - 4) {
         pageButtons.add(
           Container(
@@ -1928,13 +1920,11 @@ Expanded(
         );
       }
     } else {
-      // Show all pages if total pages is 7 or less
       for (int i = 2; i <= totalPages - 1; i++) {
         pageButtons.add(_buildPageNumberButton(i, currentPage == i - 1));
       }
     }
 
-    // Always show last page if there is more than one page
     if (totalPages > 1) {
       pageButtons.add(
           _buildPageNumberButton(totalPages, currentPage == totalPages - 1));
@@ -1946,7 +1936,6 @@ Expanded(
     );
   }
 
-// Helper method to build individual page number button
   Widget _buildPageNumberButton(int pageNumber, bool isSelected) {
     return InkWell(
       onTap: isSelected
@@ -1979,11 +1968,9 @@ Expanded(
     );
   }
 
-  // Extract team count from schedules
   int _extractTeamCount(List<Map<String, dynamic>> schedules) {
     if (schedules.isEmpty) return 0;
 
-    // Try to get from tournament details
     final tournamentId = schedules.first['tournamentSetupId'];
     final tournamentInfo = _tournamentDetailsNotifier.value[tournamentId];
     if (tournamentInfo != null &&
@@ -1992,16 +1979,13 @@ Expanded(
       if (teamIds != null) return teamIds.length;
     }
 
-    // Estimate from number of matches (matches = teams - 1)
     return schedules.length + 1;
   }
 
-  // Get bracket info string
   String _getBracketInfo(int teamCount, int matchCount) {
     if (teamCount <= 0) return '';
 
     int rounds = (teamCount - 1).bitLength;
-    int bracketSize = 1 << rounds;
 
     if (teamCount <= 8) {
       if (teamCount == 2) return 'Final (1 match)';
@@ -2035,6 +2019,8 @@ Expanded(
         return '🏊';
       case 'athletics':
         return '🏃';
+      case 'baseball':
+        return '⚾';
       default:
         return '🏆';
     }
@@ -2054,6 +2040,8 @@ Expanded(
         return Colors.lightBlue;
       case "girls":
         return Colors.pinkAccent;
+      case "innings":
+        return Colors.orange;
       default:
         return Colors.grey;
     }
@@ -2309,11 +2297,17 @@ Expanded(
 
   Future<void> _deleteAllTournamentData(String tournamentId) async {
     try {
-      final schedulesSnapshot = await FirebaseFirestore.instance
-          .collection('team_schedules')
-          .where('tournamentSetupId', isEqualTo: tournamentId)
+      final tournamentQuery = await FirebaseFirestore.instance
+          .collection('tournaments')
+          .where('id', isEqualTo: tournamentId)
           .get();
-      final schedulesCount = schedulesSnapshot.docs.length;
+      
+      if (tournamentQuery.docs.isEmpty) return;
+      
+      final tournamentDoc = tournamentQuery.docs.first;
+      final tournamentData = tournamentDoc.data();
+      final matchups = tournamentData['matchups'] as List<dynamic>? ?? [];
+      final matchesCount = matchups.length;
 
       final scoresSnapshot = await FirebaseFirestore.instance
           .collection('scores')
@@ -2353,7 +2347,7 @@ Expanded(
                       _buildDeleteStat(
                         icon: Icons.sports,
                         label: 'Matches',
-                        count: schedulesCount,
+                        count: matchesCount,
                         color: Colors.red,
                       ),
                       const Divider(height: 16),
@@ -2411,16 +2405,9 @@ Expanded(
         );
 
         try {
-          int deletedSchedules = 0;
           int deletedScores = 0;
 
-          for (var doc in schedulesSnapshot.docs) {
-            try {
-              await doc.reference.delete();
-              deletedSchedules++;
-            } catch (e) {}
-          }
-
+          // Delete all scores
           for (var doc in scoresSnapshot.docs) {
             try {
               await doc.reference.delete();
@@ -2428,20 +2415,12 @@ Expanded(
             } catch (e) {}
           }
 
-          try {
-            final tournamentQuery = await FirebaseFirestore.instance
-                .collection('tournaments')
-                .where('id', isEqualTo: tournamentId)
-                .get();
-
-            if (tournamentQuery.docs.isNotEmpty) {
-              final tournamentDoc = tournamentQuery.docs.first;
-              await FirebaseFirestore.instance
-                  .collection('tournaments')
-                  .doc(tournamentDoc.id)
-                  .delete();
-            }
-          } catch (e) {}
+          // Clear matchups in tournament
+          await tournamentDoc.reference.update({
+            'matchups': [],
+            'totalMatches': 0,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
           if (context.mounted) {
             Navigator.pop(context);
@@ -2456,7 +2435,7 @@ Expanded(
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    Text('• $deletedSchedules matches deleted'),
+                    Text('• $matchesCount matches cleared'),
                     Text('• $deletedScores scores deleted'),
                   ],
                 ),
@@ -2586,17 +2565,27 @@ class _BracketStyleTournamentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isActive = tournamentDetails?['status'] == 'Active';
+    final isActive = tournamentDetails?['status'] == 'Active' || 
+                     tournamentDetails?['status'] == 'active';
     final isCompleted = tournamentDetails?['isCompleted'] == true;
     final venue = tournamentDetails?['venue'] ?? 'Not specified';
     final assignedUsers = tournamentDetails?['assignedUsers'] as List<dynamic>?;
     
     // Calculate completion stats
     final totalMatches = originalSchedules.length;
-    final matchesWithScores = originalSchedules.where((m) {
-      final scores = m['scores'] as Map<String, dynamic>?;
-      return scores != null && scores.isNotEmpty;
-    }).length;
+    
+    int matchesWithScores = 0;
+    for (var match in originalSchedules) {
+      final scores = match['scores'] as Map<String, dynamic>?;
+      if (scores != null && scores.isNotEmpty) {
+        matchesWithScores++;
+      } else if (match['winner'] != null) {
+        matchesWithScores++;
+      } else if (match['status'] == 'completed') {
+        matchesWithScores++;
+      }
+    }
+    
     final completionPercentage = totalMatches > 0 
         ? (matchesWithScores / totalMatches * 100).toInt() 
         : 0;
@@ -2622,7 +2611,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with completion status prominently displayed
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -2641,7 +2629,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    // Sport Icon with completion indicator
                     Stack(
                       children: [
                         Container(
@@ -2661,7 +2648,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                             style: const TextStyle(fontSize: 24)
                           ),
                         ),
-                        // Completion badge on icon
                         if (isCompleted)
                           Positioned(
                             top: -2,
@@ -2688,7 +2674,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                     
                     const SizedBox(width: 12),
                     
-                    // Tournament Info
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2714,7 +2699,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              // Completion status badge
                               if (isCompleted)
                                 Container(
                                   margin: const EdgeInsets.only(left: 4),
@@ -2751,7 +2735,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                           
                           const SizedBox(height: 4),
                           
-                          // Sport and Category row
                           Row(
                             children: [
                               Container(
@@ -2791,11 +2774,9 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                       ),
                     ),
                     
-                    // Status and Completion Button
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // Active/Inactive status
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
@@ -2833,33 +2814,28 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                         
                         const SizedBox(height: 4),
                         
-                        // Completion Button
                         _TournamentCompletionButton(
                           tournamentId: tournamentId,
                           tournamentDetails: tournamentDetails,
                           matches: originalSchedules,
                           onStatusChanged: () {
-    // Call the refresh function when status changes
-                                  if (onRefresh != null) {
-                                    onRefresh!();
-                                  }
-                                },
-                                onRefresh: onRefresh, // Pass the refresh function
-                              ),
-                        
+                            if (onRefresh != null) {
+                              onRefresh!();
+                            }
+                          },
+                          onRefresh: onRefresh,
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
 
-              // Body
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Progress Bar (shows completion visually)
                     if (totalMatches > 0) ...[
                       Container(
                         height: 4,
@@ -2884,7 +2860,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       
-                      // Progress text
                       Row(
                         children: [
                           Icon(
@@ -2914,7 +2889,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                       const SizedBox(height: 8),
                     ],
                     
-                    // Info Row
                     Row(
                       children: [
                         Expanded(
@@ -2934,7 +2908,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                       ],
                     ),
 
-                    // Bracket Info
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -3026,7 +2999,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
 
                     const SizedBox(height: 8),
 
-                    // Action Buttons
                     Row(
                       children: [
                         const SizedBox(width: 4),
@@ -3043,7 +3015,6 @@ class _BracketStyleTournamentCard extends StatelessWidget {
 
                     const SizedBox(height: 8),
 
-                    // MATCHES GRID
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -3195,12 +3166,42 @@ class _CompactMatchCard extends StatelessWidget {
     final team2 =
         match['team2'] as Map<String, dynamic>? ?? {'name': 'TBD', 'id': 'tbd'};
 
-    // Get team names, replacing "Winner Match X" with just "M{X}"
     String team1Name = _getDisplayName(team1, match['team1Name']);
     String team2Name = _getDisplayName(team2, match['team2Name']);
 
+    // Get the actual team IDs - for team2, it might be in team2Id field
+    final String? team1Id = match['team1Id'] ?? team1['id'];
+    final String? team2Id = match['team2Id'] ?? team2['id'];
+    
     final scores = match['scores'] as Map<String, dynamic>? ?? {};
     final winner = match['winner'];
+    
+    // FIX: Get scores using multiple possible keys
+    String? getTeamScore(String? teamId, String teamName) {
+      if (teamId == null) return null;
+      
+      // Try direct ID match first
+      if (scores.containsKey(teamId)) {
+        return scores[teamId].toString();
+      }
+      
+      // Try name match
+      if (scores.containsKey(teamName)) {
+        return scores[teamName].toString();
+      }
+      
+      // For placeholder teams, the actual winning team ID might be stored
+      // in the winner field or in team2Id
+      if (match['team2Id'] != null && scores.containsKey(match['team2Id'])) {
+        return scores[match['team2Id']].toString();
+      }
+      
+      return null;
+    }
+
+    String? team1Score = getTeamScore(team1Id, team1Name);
+    String? team2Score = getTeamScore(team2Id, team2Name);
+
     final matchType = match['matchType'] ?? 'regular';
     final bracket = match['bracket'] as String?;
     final round = match['round'] as int? ?? 1;
@@ -3208,7 +3209,6 @@ class _CompactMatchCard extends StatelessWidget {
     final isBye = matchType == 'bye';
     final isFixedMatch = match['isFixedMatch'] == true;
 
-    // Get round name based on bracket structure
     String roundName = 'Round $round';
     if (bracket == 'winners') {
       roundName = 'Winners R$round';
@@ -3217,10 +3217,9 @@ class _CompactMatchCard extends StatelessWidget {
     } else if (bracket == 'finals') {
       roundName = match['isIfNecessary'] == true ? 'If Necessary' : 'Final';
     } else if (isFixedMatch) {
-      roundName = 'FIXED'; // Show FIXED instead of round number
+      roundName = 'FIXED';
     }
 
-    // Border color based on match type
     Color borderColor = Colors.grey.shade300;
     if (isFixedMatch) {
       borderColor = Colors.blue.shade300;
@@ -3234,7 +3233,6 @@ class _CompactMatchCard extends StatelessWidget {
       borderColor = Colors.purple.shade300;
     }
 
-    // Background color for header
     Color headerColor = Colors.grey.shade50;
     if (isFixedMatch) {
       headerColor = Colors.blue.shade50;
@@ -3258,7 +3256,6 @@ class _CompactMatchCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Match header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
             decoration: BoxDecoration(
@@ -3269,7 +3266,6 @@ class _CompactMatchCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Match number badge in header
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -3340,7 +3336,6 @@ class _CompactMatchCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // Add FIXED label badge
                 if (isFixedMatch)
                   Container(
                     margin: const EdgeInsets.only(right: 4),
@@ -3390,7 +3385,6 @@ class _CompactMatchCard extends StatelessWidget {
             ),
           ),
 
-          // Match content
           Padding(
             padding: const EdgeInsets.all(6),
             child: Column(
@@ -3398,7 +3392,7 @@ class _CompactMatchCard extends StatelessWidget {
                 if (isBye) ...[
                   _buildTeamRow(
                     name: team1Name,
-                    score: scores[team1Name]?.toString(),
+                    score: team1Score,
                     isWinner: true,
                   ),
                   const Padding(
@@ -3409,9 +3403,8 @@ class _CompactMatchCard extends StatelessWidget {
                 ] else ...[
                   _buildTeamRow(
                     name: team1Name,
-                    score: scores[team1Name]?.toString() ??
-                        scores[team1['id']]?.toString(),
-                    isWinner: winner == team1['id'] || winner == team1Name,
+                    score: team1Score,
+                    isWinner: winner == team1Id || winner == team1Name,
                   ),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 2),
@@ -3420,9 +3413,8 @@ class _CompactMatchCard extends StatelessWidget {
                   ),
                   _buildTeamRow(
                     name: team2Name,
-                    score: scores[team2Name]?.toString() ??
-                        scores[team2['id']]?.toString(),
-                    isWinner: winner == team2['id'] || winner == team2Name,
+                    score: team2Score,
+                    isWinner: winner == team2Id || winner == team2Name,
                   ),
                 ],
                 if (nextMatchRef != null)
@@ -3437,22 +3429,6 @@ class _CompactMatchCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Row(
-                //   mainAxisAlignment: MainAxisAlignment.end,
-                //   children: [
-                //     _MiniButton(
-                //       onPressed: onEdit,
-                //       icon: Icons.edit,
-                //       color: Colors.blue,
-                //     ),
-                //     const SizedBox(width: 2),
-                //     _MiniButton(
-                //       onPressed: onDelete,
-                //       icon: Icons.delete,
-                //       color: Colors.red,
-                //     ),
-                //   ],
-                // ),
               ],
             ),
           ),
@@ -3461,15 +3437,12 @@ class _CompactMatchCard extends StatelessWidget {
     );
   }
 
-  // Helper method to get display name - replaces "Winner Match X" with "M{X}"
   String _getDisplayName(Map<String, dynamic> team, String? teamName) {
     if (teamName != null && teamName.isNotEmpty) {
-      // Check if it's a winner placeholder
       if (teamName.contains('Winner Match')) {
         final matchNumber = teamName.replaceAll(RegExp(r'[^0-9]'), '');
         return 'M$matchNumber';
       }
-      // Check if it's a loser placeholder
       if (teamName.contains('Loser Match')) {
         final matchNumber = teamName.replaceAll(RegExp(r'[^0-9]'), '');
         return 'L$matchNumber';
@@ -3531,77 +3504,6 @@ class _CompactMatchCard extends StatelessWidget {
       ],
     );
   }
-}
-
-// Helper method to get display name - replaces "Winner Match X" with "M{X}"
-String _getDisplayName(Map<String, dynamic> team, String? teamName) {
-  if (teamName != null && teamName.isNotEmpty) {
-    // Check if it's a winner placeholder
-    if (teamName.contains('Winner Match')) {
-      final matchNumber = teamName.replaceAll(RegExp(r'[^0-9]'), '');
-      return 'M$matchNumber';
-    }
-    // Check if it's a loser placeholder
-    if (teamName.contains('Loser Match')) {
-      final matchNumber = teamName.replaceAll(RegExp(r'[^0-9]'), '');
-      return 'L$matchNumber';
-    }
-    return teamName;
-  }
-
-  if (team['type'] == 'placeholder') {
-    final name = team['name'] ?? '';
-    if (name.contains('Winner Match')) {
-      final matchNumber = name.replaceAll(RegExp(r'[^0-9]'), '');
-      return 'M$matchNumber';
-    }
-    if (name.contains('Loser Match')) {
-      final matchNumber = name.replaceAll(RegExp(r'[^0-9]'), '');
-      return 'L$matchNumber';
-    }
-    return name;
-  }
-
-  return team['name'] ?? 'TBD';
-}
-
-Widget _buildTeamRow({
-  required String name,
-  String? score,
-  required bool isWinner,
-}) {
-  return Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Expanded(
-        child: Text(
-          name,
-          style: TextStyle(
-            fontSize: 8,
-            fontWeight: isWinner ? FontWeight.bold : FontWeight.normal,
-            color: isWinner ? Colors.green.shade700 : Colors.black87,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-        decoration: BoxDecoration(
-          color: isWinner ? Colors.green.shade100 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(3),
-        ),
-        child: Text(
-          score ?? '-',
-          style: TextStyle(
-            fontSize: 7,
-            fontWeight: FontWeight.bold,
-            color: isWinner ? Colors.green.shade700 : Colors.grey.shade700,
-          ),
-        ),
-      ),
-    ],
-  );
 }
 
 class _MiniButton extends StatelessWidget {
@@ -3705,7 +3607,6 @@ class _IconButton extends StatelessWidget {
   }
 }
 
-// Add this helper widget at the bottom of your file
 class _DurationButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
@@ -3789,19 +3690,20 @@ class _InfoChip extends StatelessWidget {
     );
   }
 }
+
 class _TournamentCompletionButton extends StatefulWidget {
   final String tournamentId;
   final Map<String, dynamic>? tournamentDetails;
   final List<Map<String, dynamic>> matches;
   final VoidCallback onStatusChanged;
-  final Function? onRefresh; // ADD THIS
+  final VoidCallback? onRefresh;
 
   const _TournamentCompletionButton({
     required this.tournamentId,
     required this.tournamentDetails,
     required this.matches,
     required this.onStatusChanged,
-    this.onRefresh, // ADD THIS
+    this.onRefresh,
   });
 
   @override
@@ -3825,11 +3727,14 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
   @override
   void didUpdateWidget(_TournamentCompletionButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Update state if tournament details changed
     if (widget.tournamentDetails != oldWidget.tournamentDetails) {
       setState(() {
         _isCompleted = widget.tournamentDetails?['isCompleted'] == true;
       });
+    }
+    
+    if (widget.matches.length != oldWidget.matches.length) {
+      _checkScoresProgress();
     }
   }
 
@@ -3837,25 +3742,83 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
     setState(() => _checkingScores = true);
     
     try {
-      // Count matches with scores
-      int count = 0;
-      for (var match in widget.matches) {
-        final scores = match['scores'] as Map<String, dynamic>?;
-        if (scores != null && scores.isNotEmpty) {
-          count++;
-        } else if (match['winner'] != null) {
-          count++; // Consider matches with winner as having scores
+      // Get the tournament document directly to ensure latest scores
+      final tournamentDoc = await FirebaseFirestore.instance
+          .collection('tournaments')
+          .where('id', isEqualTo: widget.tournamentId)
+          .limit(1)
+          .get();
+      
+      if (tournamentDoc.docs.isNotEmpty) {
+        final tournamentData = tournamentDoc.docs.first.data();
+        final matchups = tournamentData['matchups'] as List<dynamic>? ?? [];
+        
+        int count = 0;
+        for (var matchup in matchups) {
+          final match = matchup as Map<String, dynamic>;
+          final scores = match['scores'] as Map<String, dynamic>?;
+          
+          if (scores != null && scores.isNotEmpty) {
+            count++;
+          } else if (match['winner'] != null) {
+            count++;
+          } else if (match['status'] == 'completed') {
+            count++;
+          }
+        }
+        
+        if (mounted) {
+          setState(() {
+            _matchesWithScores = count;
+            _checkingScores = false;
+          });
+        }
+      } else {
+        // Fallback to checking passed matches
+        int count = 0;
+        for (var match in widget.matches) {
+          final scores = match['scores'] as Map<String, dynamic>?;
+          if (scores != null && scores.isNotEmpty) {
+            count++;
+          } else if (match['winner'] != null) {
+            count++;
+          } else if (match['status'] == 'completed') {
+            count++;
+          }
+        }
+        
+        if (mounted) {
+          setState(() {
+            _matchesWithScores = count;
+            _checkingScores = false;
+          });
         }
       }
-      
-      if (mounted) {
-        setState(() {
-          _matchesWithScores = count;
-          _checkingScores = false;
-        });
-      }
     } catch (e) {
-      if (mounted) setState(() => _checkingScores = false);
+      print('Error checking scores: $e');
+      // Fallback to checking passed matches
+      try {
+        int count = 0;
+        for (var match in widget.matches) {
+          final scores = match['scores'] as Map<String, dynamic>?;
+          if (scores != null && scores.isNotEmpty) {
+            count++;
+          } else if (match['winner'] != null) {
+            count++;
+          } else if (match['status'] == 'completed') {
+            count++;
+          }
+        }
+        
+        if (mounted) {
+          setState(() {
+            _matchesWithScores = count;
+            _checkingScores = false;
+          });
+        }
+      } catch (e2) {
+        if (mounted) setState(() => _checkingScores = false);
+      }
     }
   }
 
@@ -3869,6 +3832,8 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
       );
       
       if (!allHaveScores && !_isCompleted) {
+        await _checkScoresProgress();
+        
         _showStatusMessage(
           '⚠️ ${_matchesWithScores}/${widget.matches.length} matches have scores',
           Colors.orange,
@@ -3887,7 +3852,6 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
         _isLoading = false;
       });
       
-      // Call both callbacks
       widget.onStatusChanged();
       if (widget.onRefresh != null) {
         widget.onRefresh!();
@@ -3942,13 +3906,11 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Progress indicator ring
                 SizedBox(
                   width: 24,
                   height: 24,
                   child: Stack(
                     children: [
-                      // Background circle
                       Container(
                         width: 24,
                         height: 24,
@@ -3964,7 +3926,6 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
                           ),
                         ),
                       ),
-                      // Progress arc or checkmark
                       if (_isCompleted)
                         const Center(
                           child: Icon(
@@ -3984,7 +3945,6 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
                             ),
                           ),
                         ),
-                      // Loading indicator
                       if (_isLoading || _checkingScores)
                         const Center(
                           child: SizedBox(
@@ -3999,7 +3959,6 @@ class __TournamentCompletionButtonState extends State<_TournamentCompletionButto
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Status text
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
