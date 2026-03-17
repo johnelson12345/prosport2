@@ -24,46 +24,34 @@ class _ResultsVerificationState extends State<ResultsVerification>
 
   DateTime _selectedDate = DateTime.now();
   String? _currentUserId;
-  Map<String, String> _tournamentNames = {};
-  Map<String, Map<String, dynamic>> _tournamentDetails = {};
+  
+  // ONLY using tournaments collection
+  final Map<String, Map<String, dynamic>> _tournaments = {};
   bool _isLoading = true;
-  bool _isSaving = false;
-  String? _savingMatchId;
+  
+  // Track loading state per match card
+  final Map<String, bool> _savingMatchId = {};
+  
   String? _selectedTournamentId;
   Map<String, dynamic>? _selectedMatch;
 
   // Filter state
   String _searchQuery = '';
   String? _filterTournamentId;
+  bool _showAllDates = false;
 
-  // Verification state
-  bool _isEditMode = false;
-  
   // Store verification status from Firebase
-  Map<String, VerificationStatus> _verificationStatus = {};
-  Map<String, List<Map<String, dynamic>>> _verificationHistory = {};
+  final Map<String, VerificationStatus> _verificationStatus = {};
+  final Map<String, List<Map<String, dynamic>>> _verificationHistory = {};
 
+  // All matches flattened from all tournaments
   List<Map<String, dynamic>> _allMatches = [];
-  // Add this with the other filter state variables
-bool _showAllDates = false; // New filter for all dates
-
-  // Score input controllers
-  final Map<String, TextEditingController> _scoreControllers = {};
-  final Map<String, String?> _selectedWinners = {};
 
   @override
   void initState() {
     super.initState();
     _loadCurrentUser();
-    _loadTournamentData();
-  }
-
-  @override
-  void dispose() {
-    for (var controller in _scoreControllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
+    _loadTournamentsFromFirebase();
   }
 
   void _loadCurrentUser() {
@@ -72,6 +60,7 @@ bool _showAllDates = false; // New filter for all dates
       setState(() {
         _currentUserId = user.uid;
       });
+      print('✅ Current User ID: ${user.uid}');
     }
   }
 
@@ -186,33 +175,36 @@ bool _showAllDates = false; // New filter for all dates
     );
   }
 
-  void _loadTournamentData() {
-    _tournamentService.getTournamentStream().listen((snapshot) {
+  // Load tournaments and extract all matches
+  void _loadTournamentsFromFirebase() {
+    print('\n🔍 ===== LOADING TOURNAMENTS FROM FIREBASE =====');
+    
+    FirebaseFirestore.instance
+        .collection('tournaments')
+        .snapshots()
+        .listen((snapshot) {
       if (!mounted) return;
 
-      final Map<String, String> names = {};
-      final Map<String, Map<String, dynamic>> details = {};
+      print('📊 Found ${snapshot.docs.length} tournaments in Firebase');
+
+      final Map<String, Map<String, dynamic>> tournaments = {};
+      final List<Map<String, dynamic>> allMatches = [];
 
       for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final tournamentId = data['id'] ?? doc.id;
-
-        names[tournamentId] = data['name'] ?? 'Unnamed Tournament';
-
-        List<String> assignedUsers = [];
-        if (data['assignedUsers'] != null) {
-          if (data['assignedUsers'] is List) {
-            assignedUsers = List<String>.from(data['assignedUsers']);
-          } else if (data['assignedUsers'] is String) {
-            assignedUsers = [data['assignedUsers']];
-          }
-        }
-
-        details[tournamentId] = {
+        final tournamentName = data['name'] ?? 'Unnamed Tournament';
+        
+        print('\n🏆 Tournament from Firebase:');
+        print('  - Document ID: ${doc.id}');
+        print('  - Tournament ID: $tournamentId');
+        print('  - Name: $tournamentName');
+        
+        // Store tournament data
+        tournaments[tournamentId] = {
           'docId': doc.id,
           'id': tournamentId,
-          'name': data['name'] ?? 'Unnamed Tournament',
-          'assignedUsers': assignedUsers,
+          'name': tournamentName,
           'venue': data['venue'] ?? 'Not specified',
           'sport': data['sport'] ?? 'Unknown',
           'category': data['category'] ?? 'Unknown',
@@ -223,9 +215,21 @@ bool _showAllDates = false; // New filter for all dates
           'eliminationType': data['eliminationType'] ?? 'Single Elimination',
         };
 
-        // Load verification status from matchups
+        // Extract matches from this tournament
         final matchups = data['matchups'] as List? ?? [];
+        print('  - Number of matchups: ${matchups.length}');
+        
         for (var matchup in matchups) {
+          // Add tournament info to each match
+          final matchWithTournament = Map<String, dynamic>.from(matchup);
+          matchWithTournament['tournamentName'] = tournamentName;
+          matchWithTournament['tournamentSetupId'] = tournamentId;
+          matchWithTournament['tournamentVenue'] = data['venue'];
+          matchWithTournament['tournamentSport'] = data['sport'];
+          
+          allMatches.add(matchWithTournament);
+          
+          // Load verification status
           final matchId = matchup['id'];
           if (matchId != null) {
             final verificationStatus = matchup['verificationStatus'];
@@ -243,7 +247,6 @@ bool _showAllDates = false; // New filter for all dates
               }
             }
             
-            // Load verification history
             final history = matchup['verificationHistory'] as List? ?? [];
             if (history.isNotEmpty) {
               _verificationHistory[matchId] = List<Map<String, dynamic>>.from(history);
@@ -252,15 +255,23 @@ bool _showAllDates = false; // New filter for all dates
         }
       }
 
+      print('\n📋 === TOURNAMENTS LOADED ===');
+      tournaments.forEach((id, data) {
+        print('  - $id: "${data['name']}" (${(data['matchups'] as List).length} matches)');
+      });
+      print('📋 Total matches extracted: ${allMatches.length}');
+      print('============================\n');
+
       if (mounted) {
         setState(() {
-          _tournamentNames = names;
-          _tournamentDetails = details;
+          _tournaments.clear();
+          _tournaments.addAll(tournaments);
+          _allMatches = allMatches;
           _isLoading = false;
         });
       }
     }, onError: (error) {
-      print('Error loading tournaments: $error');
+      print('❌ Error loading tournaments: $error');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -309,35 +320,28 @@ bool _showAllDates = false; // New filter for all dates
     return '';
   }
 
-  // Determine match status based on scores and stored verification status
   VerificationStatus _determineMatchStatus(Map<String, dynamic> match) {
     final matchId = match['id'] ?? '';
 
-    // First check if we have a stored verification status from Firebase
     if (_verificationStatus.containsKey(matchId)) {
       return _verificationStatus[matchId]!;
     }
 
-    // Check if match is a placeholder
-    if (_isPlaceholderMatch(match, _allMatches)) {
+    if (_isPlaceholderMatch(match)) {
       return VerificationStatus.pending;
     }
 
-    // Check if match has scores
     final hasScores = match['scores'] != null ||
         (match['team1Score'] != null && match['team2Score'] != null);
 
-    // If match has scores, it's ready for verification
     if (hasScores) {
       return VerificationStatus.ready;
     }
 
-    // Default to pending (no scores)
     return VerificationStatus.pending;
   }
 
-  bool _isPlaceholderMatch(
-      Map<String, dynamic> match, List<Map<String, dynamic>> allMatches) {
+  bool _isPlaceholderMatch(Map<String, dynamic> match) {
     final status = match['status'] as String? ?? 'scheduled';
     final hasScores = match['scores'] != null ||
         (match['team1Score'] != null && match['team2Score'] != null);
@@ -382,8 +386,7 @@ bool _showAllDates = false; // New filter for all dates
     return isTeam1Placeholder || isTeam2Placeholder;
   }
 
-  String _getTeamDisplayName(Map<String, dynamic>? team,
-      Map<String, dynamic> match, List<Map<String, dynamic>> allMatches) {
+  String _getTeamDisplayName(Map<String, dynamic>? team, Map<String, dynamic> match) {
     if (team == null) return 'TBD';
 
     final teamId = team['id']?.toString() ?? '';
@@ -402,7 +405,6 @@ bool _showAllDates = false; // New filter for all dates
       return team['displayName'] ?? teamName ?? 'Unknown Team';
     }
 
-    // For placeholders, return descriptive text
     if (teamName.contains('Winner')) {
       return teamName;
     } else if (teamId.contains('winner')) {
@@ -417,36 +419,28 @@ bool _showAllDates = false; // New filter for all dates
     return team['id']?.toString();
   }
 
+  // All users can access all tournaments
   bool _isUserAssignedToTournament(String tournamentId) {
-    final tournamentInfo = _tournamentDetails[tournamentId];
-    if (tournamentInfo == null) return false;
-    final assignedUsers =
-        tournamentInfo['assignedUsers'] as List<String>? ?? [];
-    if (assignedUsers.isEmpty) return true;
-    return _currentUserId != null && assignedUsers.contains(_currentUserId);
+    return true;
   }
 
-  // Update match verification status in Firebase
   Future<void> _updateMatchVerificationStatus(
     String matchId, 
     Map<String, dynamic> match, 
     VerificationStatus newStatus
   ) async {
-    if (_isSaving) return;
-
     setState(() {
-      _isSaving = true;
-      _savingMatchId = matchId;
+      _savingMatchId[matchId] = true;
     });
 
     try {
       final tournamentId = match['tournamentSetupId'];
       if (tournamentId == null) throw Exception('Tournament ID not found');
 
-      final tournamentInfo = _tournamentDetails[tournamentId];
-      if (tournamentInfo == null) throw Exception('Tournament info not found');
+      final tournamentData = _tournaments[tournamentId];
+      if (tournamentData == null) throw Exception('Tournament not found in Firebase');
 
-      final tournamentDocId = tournamentInfo['docId'];
+      final tournamentDocId = tournamentData['docId'];
       final tournamentRef = FirebaseFirestore.instance
           .collection('tournaments')
           .doc(tournamentDocId);
@@ -454,14 +448,13 @@ bool _showAllDates = false; // New filter for all dates
       final tournamentDoc = await tournamentRef.get();
       if (!tournamentDoc.exists) throw Exception('Tournament document not found');
 
-      final tournamentData = tournamentDoc.data() as Map<String, dynamic>;
+      final tournamentDocData = tournamentDoc.data() as Map<String, dynamic>;
       final matchups =
-          List<Map<String, dynamic>>.from(tournamentData['matchups'] ?? []);
+          List<Map<String, dynamic>>.from(tournamentDocData['matchups'] ?? []);
 
       final matchIndex = matchups.indexWhere((m) => m['id'] == matchId);
       if (matchIndex == -1) throw Exception('Match not found');
 
-      // Create verification history entry
       final verificationHistory = List<Map<String, dynamic>>.from(
           matchups[matchIndex]['verificationHistory'] ?? []);
       
@@ -473,7 +466,6 @@ bool _showAllDates = false; // New filter for all dates
         'action': 'status_changed',
       });
 
-      // Update match with new verification status
       matchups[matchIndex] = {
         ...matchups[matchIndex],
         'verificationStatus': newStatus.toString().split('.').last,
@@ -484,11 +476,20 @@ bool _showAllDates = false; // New filter for all dates
 
       await tournamentRef.update({'matchups': matchups});
 
-      // Update local state
       if (mounted) {
         setState(() {
           _verificationStatus[matchId] = newStatus;
           _verificationHistory[matchId] = verificationHistory;
+          _savingMatchId.remove(matchId);
+          
+          // Update local tournament data
+          _tournaments[tournamentId]?['matchups'] = matchups;
+          
+          // Update the match in _allMatches
+          final matchIndex = _allMatches.indexWhere((m) => m['id'] == matchId);
+          if (matchIndex != -1) {
+            _allMatches[matchIndex]['verificationStatus'] = newStatus.toString().split('.').last;
+          }
         });
       }
 
@@ -498,25 +499,23 @@ bool _showAllDates = false; // New filter for all dates
             content: Text('✓ Match marked as ${newStatus.toString().split('.').last}'),
             backgroundColor: _getStatusColor(newStatus),
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 1),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _savingMatchId.remove(matchId);
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating status: $e'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
           ),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-          _savingMatchId = null;
-        });
       }
     }
   }
@@ -532,7 +531,6 @@ bool _showAllDates = false; // New filter for all dates
     }
   }
 
-  // Get overall status counts regardless of filters
   Map<VerificationStatus, int> _getOverallStatusCounts() {
     final counts = {
       VerificationStatus.verified: 0,
@@ -541,59 +539,57 @@ bool _showAllDates = false; // New filter for all dates
     };
 
     for (var match in _allMatches) {
-      // Only count matches user is assigned to
-      final tournamentId = match['tournamentSetupId'];
-      if (tournamentId != null && _isUserAssignedToTournament(tournamentId)) {
-        final status = _determineMatchStatus(match);
-        counts[status] = (counts[status] ?? 0) + 1;
-      }
+      final status = _determineMatchStatus(match);
+      counts[status] = (counts[status] ?? 0) + 1;
     }
 
     return counts;
   }
 
-  List<Map<String, dynamic>> _filterMatches(
-    List<Map<String, dynamic>> allSchedules) {
-  return allSchedules.where((schedule) {
-    // Filter by user assignment
-    final tournamentId = schedule['tournamentSetupId'];
-    if (tournamentId == null) return false;
-    if (!_isUserAssignedToTournament(tournamentId)) return false;
+  List<Map<String, dynamic>> _filterMatches() {
+    print('\n🔍 ===== FILTERING MATCHES =====');
+    print('Total matches: ${_allMatches.length}');
+    
+    final filtered = _allMatches.where((match) {
+      final tournamentId = match['tournamentSetupId'];
+      
+      // Filter by selected tournament
+      if (_filterTournamentId != null && _filterTournamentId != tournamentId) {
+        return false;
+      }
 
-    // Filter by selected tournament
-    if (_filterTournamentId != null && _filterTournamentId != tournamentId) {
-      return false;
-    }
+      // Filter by date
+      if (!_showAllDates) {
+        final dateTimeStr = match['dateTime'] ?? match['startTime'];
+        final matchDateTime = _parseMatchDateTime(dateTimeStr);
+        if (matchDateTime == null) return false;
 
-    // Filter by date (only if not showing all dates)
-    if (!_showAllDates) {
-      final dateTimeStr = schedule['dateTime'] ?? schedule['startTime'];
-      final matchDateTime = _parseMatchDateTime(dateTimeStr);
-      if (matchDateTime == null) return false;
+        final isOnSelectedDate = matchDateTime.year == _selectedDate.year &&
+            matchDateTime.month == _selectedDate.month &&
+            matchDateTime.day == _selectedDate.day;
 
-      final isOnSelectedDate = matchDateTime.year == _selectedDate.year &&
-          matchDateTime.month == _selectedDate.month &&
-          matchDateTime.day == _selectedDate.day;
+        if (!isOnSelectedDate) return false;
+      }
 
-      if (!isOnSelectedDate) return false;
-    }
+      // Filter by search query
+      if (_searchQuery.isNotEmpty) {
+        final team1 = match['team1'] as Map<String, dynamic>? ?? {};
+        final team2 = match['team2'] as Map<String, dynamic>? ?? {};
+        final team1Name = _getTeamDisplayName(team1, match);
+        final team2Name = _getTeamDisplayName(team2, match);
+        final matchNumber = match['matchNumber']?.toString() ?? '';
 
-    // Filter by search query
-    if (_searchQuery.isNotEmpty) {
-      final team1 = schedule['team1'] as Map<String, dynamic>? ?? {};
-      final team2 = schedule['team2'] as Map<String, dynamic>? ?? {};
-      final team1Name = _getTeamDisplayName(team1, schedule, _allMatches);
-      final team2Name = _getTeamDisplayName(team2, schedule, _allMatches);
-      final matchNumber = schedule['matchNumber']?.toString() ?? '';
+        return team1Name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            team2Name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            matchNumber.contains(_searchQuery);
+      }
 
-      return team1Name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          team2Name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          matchNumber.contains(_searchQuery);
-    }
-
-    return true;
-  }).toList();
-}
+      return true;
+    }).toList();
+    
+    print('✅ Filtered matches: ${filtered.length}');
+    return filtered;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -631,38 +627,16 @@ bool _showAllDates = false; // New filter for all dates
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _teamScheduleService.getAllTeamSchedules(limit: 10000),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return _buildErrorState(snapshot.error.toString());
-                }
-
-                final allSchedules = snapshot.data ?? [];
-                _allMatches = allSchedules;
-                final filteredMatches = _filterMatches(allSchedules);
-                final overallCounts = _getOverallStatusCounts();
-
-                return Column(
-                  children: [
-                    // Overall Status Summary (always visible)
-                    _buildOverallStatusSummary(overallCounts),
-                    
-                    // Filter Bar
-                    _buildFilterBar(),
-                    
-                    Expanded(
-                      child: filteredMatches.isEmpty
-                          ? _buildEmptyState()
-                          : _buildMatchesList(filteredMatches),
-                    ),
-                  ],
-                );
-              },
+          : Column(
+              children: [
+                _buildOverallStatusSummary(_getOverallStatusCounts()),
+                _buildFilterBar(),
+                Expanded(
+                  child: _allMatches.isEmpty
+                      ? _buildEmptyState()
+                      : _buildMatchesList(_filterMatches()),
+                ),
+              ],
             ),
     );
   }
@@ -764,128 +738,145 @@ bool _showAllDates = false; // New filter for all dates
   }
 
   Widget _buildCompactDateSelector() {
-  return InkWell(
-    onTap: _showModernDatePicker,
-    borderRadius: BorderRadius.circular(8),
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.calendar_today,
-            size: 14,
-            color: Colors.deepOrange.shade400,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            _showAllDates ? 'All Dates' : _displayDateFormat.format(_selectedDate),
-            style: const TextStyle(
-              color: Color(0xFF2D3748),
-              fontWeight: FontWeight.w500,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(width: 2),
-          Icon(
-            Icons.arrow_drop_down,
-            size: 16,
-            color: Colors.grey.shade600,
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-  Future<void> _showModernDatePicker() async {
-  final DateTime now = DateTime.now();
-  final DateTime firstDate = DateTime(now.year - 1, now.month, now.day);
-  final DateTime lastDate = DateTime(now.year + 1, now.month, now.day);
-
-  // Show options dialog first
-  final String? action = await showDialog<String>(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+    return InkWell(
+      onTap: _showModernDatePicker,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade200),
         ),
-        title: const Text('Select Date Option'),
-        content: Column(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: Icon(Icons.calendar_month, color: Colors.deepOrange),
-              title: const Text('Specific Date'),
-              subtitle: const Text('Choose a specific date'),
-              onTap: () => Navigator.pop(context, 'specific'),
+            Icon(
+              Icons.calendar_today,
+              size: 14,
+              color: Colors.deepOrange.shade400,
             ),
-            ListTile(
-              leading: Icon(Icons.date_range, color: Colors.blue),
-              title: const Text('All Dates'),
-              subtitle: const Text('Show matches from all dates'),
-              onTap: () => Navigator.pop(context, 'all'),
+            const SizedBox(width: 4),
+            Text(
+              _showAllDates ? 'All Dates' : _displayDateFormat.format(_selectedDate),
+              style: const TextStyle(
+                color: Color(0xFF2D3748),
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 16,
+              color: Colors.grey.shade600,
             ),
           ],
         ),
-      );
-    },
-  );
-
-  if (action == 'all' && mounted) {
-    setState(() {
-      _showAllDates = true;
-    });
-    return;
+      ),
+    );
   }
 
-  if (action == 'specific' && mounted) {
-    final DateTime? pickedDate = await showDialog<DateTime>(
+  Future<void> _showModernDatePicker() async {
+    final DateTime now = DateTime.now();
+    final DateTime firstDate = DateTime(now.year - 1, now.month, now.day);
+    final DateTime lastDate = DateTime(now.year + 1, now.month, now.day);
+
+    final String? action = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
+        return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: Container(
-            width: 380,
-            padding: const EdgeInsets.all(24),
-            child: ModernCalendarPicker(
-              initialDate: _selectedDate,
-              firstDate: firstDate,
-              lastDate: lastDate,
-              onDateSelected: (date) {
-                Navigator.pop(context, date);
-              },
-            ),
+          title: const Text('Select Date Option'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.calendar_month, color: Colors.deepOrange),
+                title: const Text('Specific Date'),
+                subtitle: const Text('Choose a specific date'),
+                onTap: () => Navigator.pop(context, 'specific'),
+              ),
+              ListTile(
+                leading: Icon(Icons.date_range, color: Colors.blue),
+                title: const Text('All Dates'),
+                subtitle: const Text('Show matches from all dates'),
+                onTap: () => Navigator.pop(context, 'all'),
+              ),
+            ],
           ),
         );
       },
     );
 
-    if (pickedDate != null && mounted) {
+    if (action == 'all' && mounted) {
       setState(() {
-        _selectedDate = pickedDate;
-        _showAllDates = false;
-        _selectedMatch = null;
+        _showAllDates = true;
       });
+      return;
+    }
+
+    if (action == 'specific' && mounted) {
+      final DateTime? pickedDate = await showDialog<DateTime>(
+        context: context,
+        builder: (BuildContext context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Container(
+              width: 380,
+              padding: const EdgeInsets.all(24),
+              child: ModernCalendarPicker(
+                initialDate: _selectedDate,
+                firstDate: firstDate,
+                lastDate: lastDate,
+                onDateSelected: (date) {
+                  Navigator.pop(context, date);
+                },
+              ),
+            ),
+          );
+        },
+      );
+
+      if (pickedDate != null && mounted) {
+        setState(() {
+          _selectedDate = pickedDate;
+          _showAllDates = false;
+          _selectedMatch = null;
+        });
+      }
     }
   }
-}
 
   Widget _buildFilterBar() {
+    final dropdownItems = <DropdownMenuItem<String>>[
+      const DropdownMenuItem<String>(
+        value: null,
+        child: Text('All Tournaments', style: TextStyle(fontSize: 13)),
+      ),
+      ..._tournaments.entries.map((entry) {
+        print('Dropdown item: ${entry.key} → ${entry.value['name']}');
+        return DropdownMenuItem<String>(
+          value: entry.key,
+          child: Text(
+            entry.value['name'] ?? 'Unnamed Tournament',
+            style: const TextStyle(fontSize: 13),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      }),
+    ];
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.white,
       child: Row(
         children: [
-          // Search Field
           Expanded(
             flex: 2,
             child: Container(
@@ -912,7 +903,6 @@ bool _showAllDates = false; // New filter for all dates
             ),
           ),
           const SizedBox(width: 8),
-          // Tournament Filter
           Container(
             width: 200,
             height: 40,
@@ -928,24 +918,9 @@ bool _showAllDates = false; // New filter for all dates
                 hint: const Text('All Tournaments', style: TextStyle(fontSize: 13)),
                 icon: Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
                 isExpanded: true,
-                items: [
-                  const DropdownMenuItem(
-                    value: null,
-                    child: Text('All Tournaments', style: TextStyle(fontSize: 13)),
-                  ),
-                  ..._tournamentNames.entries.map((entry) {
-                    return DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(
-                        entry.value,
-                        style: const TextStyle(fontSize: 13),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }),
-                ],
+                items: dropdownItems,
                 onChanged: (value) {
+                  print('Selected tournament: $value');
                   setState(() {
                     _filterTournamentId = value;
                     _selectedMatch = null;
@@ -955,7 +930,6 @@ bool _showAllDates = false; // New filter for all dates
             ),
           ),
           const SizedBox(width: 8),
-          // Filter Stats Summary (shows filtered counts)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -1011,12 +985,21 @@ bool _showAllDates = false; // New filter for all dates
   }
 
   Widget _buildMatchesList(List<Map<String, dynamic>> matches) {
+    print('\n📋 Building matches list with ${matches.length} matches');
+    
     // Group by tournament
     Map<String, List<Map<String, dynamic>>> tournamentMatches = {};
     for (var match in matches) {
       final tournamentId = match['tournamentSetupId'] ?? 'Unknown';
       tournamentMatches.putIfAbsent(tournamentId, () => []).add(match);
     }
+
+    print('Grouped into ${tournamentMatches.length} tournaments:');
+    tournamentMatches.forEach((id, matches) {
+      final tournamentData = _tournaments[id];
+      final name = tournamentData?['name'] ?? 'Unknown Tournament';
+      print('  - $id: "$name" (${matches.length} matches)');
+    });
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -1030,13 +1013,11 @@ bool _showAllDates = false; // New filter for all dates
 
   Widget _buildTournamentSection(
       String tournamentId, List<Map<String, dynamic>> matches) {
-    final tournamentName =
-        _tournamentNames[tournamentId] ?? 'Unknown Tournament';
-    final tournamentInfo = _tournamentDetails[tournamentId] ?? {};
-    final sport = tournamentInfo['sport'] ?? 'Unknown';
-    final venue = tournamentInfo['venue'] ?? 'Not specified';
+    final tournamentData = _tournaments[tournamentId];
+    final tournamentName = tournamentData?['name'] ?? 'Unknown Tournament';
+    final sport = tournamentData?['sport'] ?? 'Unknown';
+    final venue = tournamentData?['venue'] ?? 'Not specified';
 
-    // Count statuses for this tournament
     int verifiedCount = 0;
     int readyCount = 0;
     int pendingCount = 0;
@@ -1064,17 +1045,22 @@ bool _showAllDates = false; // New filter for all dates
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Tournament Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.deepOrange.withOpacity(0.05),
+              color: tournamentData == null 
+                  ? Colors.red.withOpacity(0.05) 
+                  : Colors.deepOrange.withOpacity(0.05),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
               ),
               border: Border(
-                bottom: BorderSide(color: Colors.grey.shade200),
+                bottom: BorderSide(
+                  color: tournamentData == null 
+                      ? Colors.red.shade200 
+                      : Colors.grey.shade200,
+                ),
               ),
             ),
             child: Row(
@@ -1082,11 +1068,18 @@ bool _showAllDates = false; // New filter for all dates
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.deepOrange,
+                    color: tournamentData == null 
+                        ? Colors.red 
+                        : Colors.deepOrange,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.emoji_events,
-                      color: Colors.white, size: 16),
+                  child: Icon(
+                    tournamentData == null 
+                        ? Icons.warning 
+                        : Icons.emoji_events,
+                    color: Colors.white, 
+                    size: 16,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1095,18 +1088,24 @@ bool _showAllDates = false; // New filter for all dates
                     children: [
                       Text(
                         tournamentName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: Color(0xFF2D3748),
+                          color: tournamentData == null 
+                              ? Colors.red.shade700 
+                              : const Color(0xFF2D3748),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '$sport • $venue',
+                        tournamentData == null
+                            ? '⚠️ Tournament not found in Firebase'
+                            : '$sport • $venue',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey.shade600,
+                          color: tournamentData == null
+                              ? Colors.red.shade400
+                              : Colors.grey.shade600,
                         ),
                       ),
                     ],
@@ -1133,7 +1132,6 @@ bool _showAllDates = false; // New filter for all dates
             ),
           ),
 
-          // Matches List
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1181,15 +1179,15 @@ bool _showAllDates = false; // New filter for all dates
     final isSelected = _selectedMatch?['id'] == matchId;
     final team1 = match['team1'] as Map<String, dynamic>? ?? {};
     final team2 = match['team2'] as Map<String, dynamic>? ?? {};
-    final team1Name = _getTeamDisplayName(team1, match, _allMatches);
-    final team2Name = _getTeamDisplayName(team2, match, _allMatches);
+    final team1Name = _getTeamDisplayName(team1, match);
+    final team2Name = _getTeamDisplayName(team2, match);
     final team1Id = _getTeamId(team1);
     final team2Id = _getTeamId(team2);
     final matchTime = _formatMatchTime(match['dateTime'] ?? match['startTime']);
     final matchNumber = match['matchNumber'] ?? '#';
     final status = _determineMatchStatus(match);
+    final isSaving = _savingMatchId[matchId] == true;
 
-    // Get existing scores if any
     final existingScores = match['scores'] as Map<String, dynamic>? ?? {};
     final score1 = existingScores[team1Id ?? team1Name] ??
         existingScores[team1Name] ??
@@ -1223,160 +1221,170 @@ bool _showAllDates = false; // New filter for all dates
         break;
     }
 
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedMatch = match;
-        });
-        _showMatchDetailsDialog(match);
-      },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? statusColor.withOpacity(0.05) : Colors.white,
-        ),
-        child: Row(
-          children: [
-            // Status Indicator
-            Container(
-              width: 4,
-              height: 40,
-              decoration: BoxDecoration(
-                color: statusColor,
-                borderRadius: BorderRadius.circular(2),
+    return Opacity(
+      opacity: isSaving ? 0.7 : 1.0,
+      child: InkWell(
+        onTap: () {
+          if (!isSaving) {
+            setState(() {
+              _selectedMatch = match;
+            });
+            _showMatchDetailsDialog(match);
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSelected ? statusColor.withOpacity(0.05) : Colors.white,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-
-            // Team 1 Logo
-            _buildTeamLogo(team1Id, team1Name, size: 36),
-            const SizedBox(width: 8),
-
-            // Match Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Match $matchNumber',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade800,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (matchTime.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            matchTime,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          team1Name,
+              const SizedBox(width: 12),
+              _buildTeamLogo(team1Id, team1Name, size: 36),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Match $matchNumber',
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: hasScores ? Colors.grey.shade800 : Colors.grey.shade600,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade800,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      if (hasScores)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
+                        const SizedBox(width: 8),
+                        if (matchTime.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              matchTime,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
                           ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
                           child: Text(
-                            '$score1 - $score2',
+                            team1Name,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: hasScores ? Colors.grey.shade800 : Colors.grey.shade600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (hasScores)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$score1 - $score2',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            'vs',
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade700,
+                              color: Colors.grey.shade400,
                             ),
                           ),
                         ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(
-                          'vs',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade400,
+                        Expanded(
+                          child: Text(
+                            team2Name,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: hasScores ? Colors.grey.shade800 : Colors.grey.shade600,
+                            ),
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          team2Name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: hasScores ? Colors.grey.shade800 : Colors.grey.shade600,
-                          ),
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // Team 2 Logo
-            const SizedBox(width: 8),
-            _buildTeamLogo(team2Id, team2Name, size: 36),
-
-            const SizedBox(width: 12),
-
-            // Status Badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: statusColor.withOpacity(0.3)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(statusIcon, size: 12, color: statusColor),
-                  const SizedBox(width: 4),
-                  Text(
-                    statusText,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              _buildTeamLogo(team2Id, team2Name, size: 36),
+              const SizedBox(width: 12),
+              isSaving
+                  ? SizedBox(
+                      width: 70,
+                      height: 24,
+                      child: Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                          ),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: statusColor.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(statusIcon, size: 12, color: statusColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: statusColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ],
+          ),
         ),
       ),
     );
@@ -1386,8 +1394,8 @@ bool _showAllDates = false; // New filter for all dates
     final matchId = match['id'] ?? '';
     final team1 = match['team1'] as Map<String, dynamic>? ?? {};
     final team2 = match['team2'] as Map<String, dynamic>? ?? {};
-    final team1Name = _getTeamDisplayName(team1, match, _allMatches);
-    final team2Name = _getTeamDisplayName(team2, match, _allMatches);
+    final team1Name = _getTeamDisplayName(team1, match);
+    final team2Name = _getTeamDisplayName(team2, match);
     final team1Id = _getTeamId(team1);
     final team2Id = _getTeamId(team2);
     final matchNumber = match['matchNumber'] ?? '#';
@@ -1395,7 +1403,6 @@ bool _showAllDates = false; // New filter for all dates
     final hasScores = match['scores'] != null ||
         (match['team1Score'] != null && match['team2Score'] != null);
 
-    // Get existing scores
     final existingScores = match['scores'] as Map<String, dynamic>? ?? {};
     final score1 = existingScores[team1Id ?? team1Name] ??
         existingScores[team1Name] ??
@@ -1419,7 +1426,6 @@ bool _showAllDates = false; // New filter for all dates
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Match Header
                 Row(
                   children: [
                     Container(
@@ -1442,13 +1448,9 @@ bool _showAllDates = false; // New filter for all dates
                     _buildStatusChip(status),
                   ],
                 ),
-
                 const SizedBox(height: 24),
-
-                // Teams and Scores
                 Row(
                   children: [
-                    // Team 1
                     Expanded(
                       child: Column(
                         children: [
@@ -1483,7 +1485,6 @@ bool _showAllDates = false; // New filter for all dates
                         ],
                       ),
                     ),
-
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
@@ -1495,8 +1496,6 @@ bool _showAllDates = false; // New filter for all dates
                         ),
                       ),
                     ),
-
-                    // Team 2
                     Expanded(
                       child: Column(
                         children: [
@@ -1533,10 +1532,7 @@ bool _showAllDates = false; // New filter for all dates
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 24),
-
-                // Winner Info (if available)
                 if (match['winner'] != null && match['winner'] != 'tie')
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -1561,7 +1557,6 @@ bool _showAllDates = false; // New filter for all dates
                       ],
                     ),
                   ),
-
                 if (match['winner'] == 'tie')
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -1584,10 +1579,7 @@ bool _showAllDates = false; // New filter for all dates
                       ],
                     ),
                   ),
-
                 const SizedBox(height: 24),
-
-                // Verification Status Toggle
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1614,15 +1606,13 @@ bool _showAllDates = false; // New filter for all dates
                               icon: Icons.verified,
                               color: Colors.green,
                               isSelected: status == VerificationStatus.verified,
-                              onTap: hasScores ? () {
-                                _updateMatchVerificationStatus(
-                                  matchId, 
-                                  match, 
-                                  VerificationStatus.verified
-                                );
-                                Navigator.pop(context);
-                              } : null,
+                              matchId: matchId,
+                              match: match,
+                              newStatus: VerificationStatus.verified,
                               enabled: hasScores,
+                              onTap: () {
+                                Navigator.pop(context);
+                              },
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1632,15 +1622,13 @@ bool _showAllDates = false; // New filter for all dates
                               icon: Icons.play_circle_filled,
                               color: Colors.blue,
                               isSelected: status == VerificationStatus.ready,
-                              onTap: hasScores ? () {
-                                _updateMatchVerificationStatus(
-                                  matchId, 
-                                  match, 
-                                  VerificationStatus.ready
-                                );
-                                Navigator.pop(context);
-                              } : null,
+                              matchId: matchId,
+                              match: match,
+                              newStatus: VerificationStatus.ready,
                               enabled: hasScores,
+                              onTap: () {
+                                Navigator.pop(context);
+                              },
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1650,15 +1638,13 @@ bool _showAllDates = false; // New filter for all dates
                               icon: Icons.hourglass_empty,
                               color: Colors.orange,
                               isSelected: status == VerificationStatus.pending,
+                              matchId: matchId,
+                              match: match,
+                              newStatus: VerificationStatus.pending,
+                              enabled: true,
                               onTap: () {
-                                _updateMatchVerificationStatus(
-                                  matchId, 
-                                  match, 
-                                  VerificationStatus.pending
-                                );
                                 Navigator.pop(context);
                               },
-                              enabled: true,
                             ),
                           ),
                         ],
@@ -1692,10 +1678,7 @@ bool _showAllDates = false; // New filter for all dates
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 16),
-
-                // Verification History (if available)
                 if (_verificationHistory.containsKey(matchId) && _verificationHistory[matchId]!.isNotEmpty)
                   Container(
                     margin: const EdgeInsets.only(top: 8),
@@ -1759,10 +1742,7 @@ bool _showAllDates = false; // New filter for all dates
                       ],
                     ),
                   ),
-
                 const SizedBox(height: 16),
-
-                // Close Button
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Close'),
@@ -1780,11 +1760,19 @@ bool _showAllDates = false; // New filter for all dates
     required IconData icon,
     required Color color,
     required bool isSelected,
-    required VoidCallback? onTap,
+    required String matchId,
+    required Map<String, dynamic> match,
+    required VerificationStatus newStatus,
     required bool enabled,
+    required VoidCallback onTap,
   }) {
+    final isSaving = _savingMatchId[matchId] == true;
+
     return InkWell(
-      onTap: enabled ? onTap : null,
+      onTap: enabled && !isSaving ? () {
+        _updateMatchVerificationStatus(matchId, match, newStatus);
+        onTap();
+      } : null,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
@@ -1795,24 +1783,32 @@ bool _showAllDates = false; // New filter for all dates
             width: isSelected ? 2 : 1,
           ),
         ),
-        child: Column(
-          children: [
-            Icon(
-              icon, 
-              color: enabled ? (isSelected ? color : Colors.grey.shade600) : Colors.grey.shade400,
-              size: 20,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: enabled ? (isSelected ? color : Colors.grey.shade700) : Colors.grey.shade400,
+        child: isSaving
+            ? const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : Column(
+                children: [
+                  Icon(
+                    icon, 
+                    color: enabled ? (isSelected ? color : Colors.grey.shade600) : Colors.grey.shade400,
+                    size: 20,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: enabled ? (isSelected ? color : Colors.grey.shade700) : Colors.grey.shade400,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
