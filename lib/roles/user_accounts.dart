@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -173,7 +175,7 @@ class _UserManagementState extends State<UserManagement> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: selectedRole,
+                  initialValue: selectedRole,
                   decoration: const InputDecoration(labelText: 'Role'),
                   items: ['Admin', 'Tournament Official', 'Tabulator', 'Viewer']
                       .map((role) =>
@@ -274,7 +276,7 @@ class _UserManagementState extends State<UserManagement> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: DropdownButtonFormField<String>(
-            value: _selectedRole,
+            initialValue: _selectedRole,
             decoration: const InputDecoration(
               labelText: 'Filter by Role',
               border: OutlineInputBorder(),

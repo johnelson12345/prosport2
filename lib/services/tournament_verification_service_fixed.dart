@@ -122,7 +122,7 @@ class TournamentVerificationService {
   Stream<QuerySnapshot> getVerifiedTournaments() async* {
     String? activeEventId = await _sportsEventService.getActiveSportsEventId();
     if (activeEventId == null) {
-      yield* Stream.empty();
+      yield* const Stream.empty();
     } else {
       yield* _firestore
           .collection('tournaments')
@@ -171,7 +171,7 @@ class TournamentVerificationService {
   Stream<QuerySnapshot> streamVerificationStatus(String tournamentId) async* {
     String? activeEventId = await _sportsEventService.getActiveSportsEventId();
     if (activeEventId == null) {
-      yield* Stream.empty();
+      yield* const Stream.empty();
     } else {
       yield* _firestore
           .collection('tournament_verifications')

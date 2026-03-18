@@ -1,3 +1,5 @@
+// ignore_for_file: library_private_types_in_public_api, deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -22,7 +24,6 @@ class _BracketsNewScreenState extends State<BracketsNewScreen> {
   List<Map<String, dynamic>> _filteredTournaments = [];
   final TextEditingController _searchController = TextEditingController();
   bool _isLoadingInitialData = true;
-  bool _hasError = false;
   Map<String, String> _teamNamesById = {};
 
   // Pagination variables
@@ -103,7 +104,7 @@ class _BracketsNewScreenState extends State<BracketsNewScreen> {
   }
 
   Future<void> _fetchTeams() async {
-    final teams = await _teamService.getTeams();
+    await _teamService.getTeams();
     setState(() {
       // Teams fetched but not stored since not needed in this screen anymore
     });
@@ -205,6 +206,7 @@ class _BracketsNewScreenState extends State<BracketsNewScreen> {
 
                               // Modern color scheme based on status
                               Color cardColor1, cardColor2;
+                              // ignore: unused_local_variable
                               Color textColor = Colors.white;
 
                               switch (status.toLowerCase()) {
@@ -828,7 +830,6 @@ class _BracketViewScreenState extends State<BracketViewScreen> {
       // Format to readable format: Jan 15, 2024 2:30 PM
       return DateFormat('MMM dd, yyyy hh:mm a').format(dateTime);
     } catch (e) {
-      print('Error formatting date: $dateTimeString - $e');
       return dateTimeString; // fallback to original string if parsing fails
     }
   }
@@ -879,7 +880,6 @@ class _BracketViewScreenState extends State<BracketViewScreen> {
         });
       }
     }).catchError((error) {
-      print('Error fetching tournament: $error');
       setState(() {
         _isLoadingMatchups = false;
       });
@@ -1070,7 +1070,7 @@ class _BracketViewScreenState extends State<BracketViewScreen> {
                   // Team 1
                   if (teams.isNotEmpty)
                     _buildBracketTeam(
-                      teams.length > 0 ? teams[0] : '',
+                      teams.isNotEmpty ? teams[0] : '',
                       scores,
                       winner,
                     ),
@@ -1578,9 +1578,9 @@ class _BracketViewScreenState extends State<BracketViewScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Text(
+            const Text(
               'No Matchups Available',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Color.fromARGB(255, 0, 0, 0),

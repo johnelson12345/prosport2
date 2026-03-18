@@ -30,14 +30,11 @@ Stream<List<Map<String, dynamic>>> getLatestAnnouncements(
     String? activeEventId;
     try {
       activeEventId = await _sportsEventService.getActiveSportsEventId();
-      print('DEBUG: Active sports event ID: $activeEventId');
     } catch (e) {
-      print('DEBUG [ScheduleAnnouncementService]: Error getting active event ID: $e');
       activeEventId = null;
     }
     
     if (activeEventId == null) {
-      print('DEBUG [ScheduleAnnouncementService]: No active event, yielding empty list');
       yield [];
       return;
     }
@@ -49,18 +46,15 @@ Stream<List<Map<String, dynamic>>> getLatestAnnouncements(
           .limit(limit)
           .snapshots()
           .map((snapshot) {
-            print('DEBUG [ScheduleAnnouncementService]: Received ${snapshot.docs.length} announcement docs');
             try {
               return snapshot.docs
                   .map((doc) => doc.data() as Map<String, dynamic>)
                   .toList();
             } catch (castError) {
-              print('DEBUG [ScheduleAnnouncementService]: Cast error on doc data: $castError');
               return <Map<String, dynamic>>[];
             }
           });
     } catch (queryError) {
-      print('DEBUG [ScheduleAnnouncementService]: Firestore query error: $queryError');
       yield [];
     }
   }

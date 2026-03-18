@@ -1,5 +1,7 @@
 // lib/widgets/modern_calendar_picker.dart
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -10,12 +12,12 @@ class ModernCalendarPicker extends StatefulWidget {
   final Function(DateTime) onDateSelected;
 
   const ModernCalendarPicker({
-    Key? key,
+    super.key,
     required this.initialDate,
     required this.firstDate,
     required this.lastDate,
     required this.onDateSelected,
-  }) : super(key: key);
+  });
 
   @override
   State<ModernCalendarPicker> createState() => _ModernCalendarPickerState();

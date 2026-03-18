@@ -1,3 +1,5 @@
+// ignore_for_file: library_private_types_in_public_api
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:tabulation_systemv7/services/sports_category.dart';
@@ -32,7 +34,7 @@ class _SportsScreenState extends State<SportsScreen>
       appBar: AppBar(
         title: const Text('Sports Categories'),
         backgroundColor: Colors.white,
-        actions: [
+        actions: const [
           // ElevatedButton.icon(
           //   onPressed: () {
           //     // TODO: Implement add category functionality

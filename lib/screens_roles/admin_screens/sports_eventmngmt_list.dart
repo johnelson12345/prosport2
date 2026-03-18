@@ -1,7 +1,8 @@
+// ignore_for_file: library_private_types_in_public_api, deprecated_member_use, use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_mngmt_dialog.dart';
 import 'package:tabulation_systemv7/services/sports_event_service.dart';
 import 'package:tabulation_systemv7/authentication/login.dart';
 import 'package:uuid/uuid.dart';

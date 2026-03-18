@@ -49,7 +49,7 @@ class LoginPageState extends State<LoginPage> {
 
         switch (normalizedRole) {
           case 'admin':
-            nextScreen = AdminScreen();
+            nextScreen = const AdminScreen();
             break;
           case 'tournament official':
             nextScreen = const TournamentMain();
@@ -320,7 +320,6 @@ class LoginPageState extends State<LoginPage> {
                                   } catch (e) {
                                     _showError(
                                         "An error occurred during Google sign-in: $e");
-                                    print("Google sign-in error: $e");
                                   }
                                   if (!mounted) return;
                                   setState(() => isLoading = false);

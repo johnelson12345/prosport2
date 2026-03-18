@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:tabulation_systemv7/splash_screen.dart';
-import 'package:tabulation_systemv7/services/update_service.dart';
 import 'firebase_options.dart';
 
 void main() async {

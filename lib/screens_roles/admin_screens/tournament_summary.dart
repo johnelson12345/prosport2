@@ -1,9 +1,10 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:flutter/services.dart' show rootBundle;
 
 class TournamentSummaryScreen extends StatefulWidget {
   final String tournamentId;
@@ -20,6 +21,7 @@ class TournamentSummaryScreen extends StatefulWidget {
   });
 
   @override
+  // ignore: library_private_types_in_public_api
   _TournamentSummaryScreenState createState() =>
       _TournamentSummaryScreenState();
 }
@@ -136,7 +138,7 @@ class _TournamentSummaryScreenState extends State<TournamentSummaryScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
@@ -273,7 +275,7 @@ class _TournamentSummaryScreenState extends State<TournamentSummaryScreen> {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 4,
@@ -308,7 +310,7 @@ class _TournamentSummaryScreenState extends State<TournamentSummaryScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: Colors.black12,
               blurRadius: 6,
@@ -373,9 +375,10 @@ class _TournamentSummaryScreenState extends State<TournamentSummaryScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
+                  // ignore: deprecated_member_use
                   color: _getRankColor(team['rank']).withOpacity(0.3),
                   blurRadius: 6,
-                  offset: Offset(0, 2),
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
@@ -568,7 +571,7 @@ class _TournamentSummaryScreenState extends State<TournamentSummaryScreen> {
                     ),
                     pw.Text(
                       'Generated on: ${DateTime.now().toString().split(' ')[0]}',
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         color: PdfColors.grey600,
                         fontSize: 10,
                       ),
@@ -607,7 +610,7 @@ class _TournamentSummaryScreenState extends State<TournamentSummaryScreen> {
                   children: [
                     // Table Header
                     pw.TableRow(
-                      decoration: pw.BoxDecoration(
+                      decoration: const pw.BoxDecoration(
                         color: PdfColors.grey200,
                       ),
                       children: [
@@ -759,7 +762,7 @@ class _TournamentSummaryScreenState extends State<TournamentSummaryScreen> {
                   child: pw.Center(
                     child: pw.Text(
                       'Tournament completed successfully',
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         fontSize: 10,
                         color: PdfColors.grey600,
                       ),

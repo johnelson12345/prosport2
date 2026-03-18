@@ -10,7 +10,7 @@ class ParticipantsService {
   Stream<QuerySnapshot> getParticipantsStream() async* {
     String? activeEventId = await _sportsEventService.getActiveSportsEventId();
     if (activeEventId == null) {
-      yield* Stream.empty();
+      yield* const Stream.empty();
     } else {
       yield* _participantsCollection
           .where('sportsEventId', isEqualTo: activeEventId)

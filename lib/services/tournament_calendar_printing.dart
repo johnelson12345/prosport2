@@ -58,7 +58,7 @@ class TournamentCalendarPrinting {
       required double timeColumnFontSize,
       required double eventFontSize}) {
     final List<pw.Widget> pages = [];
-    final int maxSportsPerPage = 8; // Adjust based on content density
+    const int maxSportsPerPage = 8; // Adjust based on content density
 
     // Split sports into chunks for multiple pages
     for (int i = 0; i < sports.length; i += maxSportsPerPage) {
@@ -79,6 +79,7 @@ class TournamentCalendarPrinting {
               ),
             ),
             pw.Text(
+              // ignore: unnecessary_brace_in_string_interps
               'Sports ${i + 1}-${end} of ${sports.length}',
               style: pw.TextStyle(
                 fontSize: baseFontSize,
@@ -112,8 +113,8 @@ class TournamentCalendarPrinting {
       bool isPartial = false}) {
     // Calculate column widths
     final List<pw.TableColumnWidth> columnWidths = [
-      pw.FixedColumnWidth(40), // Time column width
-      ...List.generate(sports.length, (index) => pw.FlexColumnWidth(1)),
+      const pw.FixedColumnWidth(40), // Time column width
+      ...List.generate(sports.length, (index) => const pw.FlexColumnWidth(1)),
     ];
 
     return pw.Table(

@@ -1,3 +1,5 @@
+// ignore_for_file: unused_local_variable
+
 import 'package:flutter/material.dart';
 
 class DoubleEliminationGenerator {
@@ -66,11 +68,7 @@ class DoubleEliminationGenerator {
 
     _linkDoubleEliminationReferences();
 
-    print(
-        'Generated ${_matchups.length} double elimination matches for $teamCount teams');
     for (var match in _matchups) {
-      print(
-          'Match ${match['matchNumber']} (${match['bracket']} R${match['round']}): ${match['team1Name']} vs ${match['team2Name']}');
     }
 
     return _matchups;
@@ -595,7 +593,6 @@ class DoubleEliminationGenerator {
       isGrandFinal: true,
     );
 
-    print('✅ Generated ${_matchups.length} matches for 5 teams');
   }
 
   // 6-Team Double Elimination - REDUCED to 9 matches (Option 2)

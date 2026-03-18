@@ -1,3 +1,5 @@
+// ignore_for_file: unused_local_variable, library_private_types_in_public_api
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -93,8 +95,6 @@ class _BracketsNewScreenState extends State<ViewerScreen> {
 
         // Debug print to check fetched data
         for (var matchup in allMatchups) {
-          print(
-              'Fetched matchup for tournament $tournamentId: id=${matchup['id']}, teams=${matchup['teams']}, scores=${matchup['scores']}, winner=${matchup['winner']}');
         }
 
         _matchups = allMatchups;
@@ -150,7 +150,6 @@ class _BracketsNewScreenState extends State<ViewerScreen> {
 
   void _handleMatchupTap(Map<String, dynamic> matchup) {
     // Handle the tap event on a matchup card here
-    print('Tapped matchup: \$matchup');
     // You can add navigation or dialog display logic here
   }
 

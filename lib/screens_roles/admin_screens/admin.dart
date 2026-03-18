@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, unused_element
+
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,7 +11,6 @@ import 'package:tabulation_systemv7/screens_roles/admin_screens/sports_eventmngm
 import 'package:tabulation_systemv7/screens_roles/admin_screens/teams/teams_management.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/venue/venue_management.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_matrix_view.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_mngmt_dialog.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_mngmt_screen.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_scheduling.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/admin_dashboard.dart';
@@ -18,8 +19,6 @@ import 'package:tabulation_systemv7/services/sports_event_service.dart';
 import 'package:tabulation_systemv7/authentication/login.dart';
 import 'package:tabulation_systemv7/widgets/update_notification.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'dart:io';
 
 //big filedasdasddasda
 class AdminScreen extends StatefulWidget {
@@ -181,45 +180,6 @@ class _AdminScreenState extends State<AdminScreen>
     }
   }
 
-  Future<void> _editDisplayName() async {
-    final TextEditingController nameController =
-        TextEditingController(text: _currentUser!.displayName ?? '');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Display Name'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(hintText: 'Enter new display name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.of(context).pop(nameController.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && result.isNotEmpty) {
-      try {
-        await _currentUser!.updateDisplayName(result);
-        _loadCurrentUser(); // Refresh user data
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Display name updated successfully')),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update display name: $e')),
-        );
-      }
-    }
-  }
 
   Future<void> _changeProfilePicture() async {
     final ImagePicker picker = ImagePicker();
@@ -282,8 +242,8 @@ class _AdminScreenState extends State<AdminScreen>
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 5, 18, 37),
+              decoration: const BoxDecoration(
+                color: Color.fromARGB(255, 5, 18, 37),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -304,7 +264,7 @@ class _AdminScreenState extends State<AdminScreen>
                         ),
                       ),
                       const SizedBox(width: 16),
-                      Expanded(
+                      const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

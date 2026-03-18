@@ -75,7 +75,6 @@ class AuthService {
 
       return userCredential.user;
     } catch (e) {
-      print('Error during Google sign-in: $e');
       throw Exception('Google sign-in failed: $e');
     }
   }

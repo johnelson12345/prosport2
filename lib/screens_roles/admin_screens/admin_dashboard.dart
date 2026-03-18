@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -115,9 +117,9 @@ class ReportsAnalyticsState extends State<AdminDashboard> {
   Map<String, int> categoryCounts = {};
   Map<String, int> verificationStatus = {};
   Map<String, int> userRoleCounts = {};
-  Map<String, String> _userNames = {};
-  Map<String, String> _userEmails = {};
-  Map<String, List<dynamic>> _tournamentAssignedUsers = {};
+  final Map<String, String> _userNames = {};
+  final Map<String, String> _userEmails = {};
+  final Map<String, List<dynamic>> _tournamentAssignedUsers = {};
   bool _isLoading = true;
 
   @override
@@ -149,7 +151,7 @@ class ReportsAnalyticsState extends State<AdminDashboard> {
     try {
       final usersSnapshot = await _firestore.collection('users').get();
       for (var doc in usersSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final userId = doc.id;
         final email = data['email']?.toString() ?? 'Unknown Email';
         final name = data['name']?.toString() ?? email.split('@')[0];
@@ -171,7 +173,7 @@ class ReportsAnalyticsState extends State<AdminDashboard> {
       final Map<String, Map<String, dynamic>> tournamentDataById = {};
 
       for (var doc in tournamentsSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final customId = data['id']?.toString();
 
         // Map by document ID
@@ -244,7 +246,7 @@ class ReportsAnalyticsState extends State<AdminDashboard> {
       final List<String> tournamentIds = [];
 
       for (var doc in tournamentsSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final tournamentId = data['id']?.toString() ?? '';
         final docId = doc.id;
 
@@ -273,7 +275,7 @@ class ReportsAnalyticsState extends State<AdminDashboard> {
       teamSchedules = [];
 
       for (var doc in schedulesSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final tournamentId = data['tournamentSetupId']?.toString() ?? 'unknown';
 
         final tournamentInfo = tournamentDataMap[tournamentId];
@@ -282,13 +284,12 @@ class ReportsAnalyticsState extends State<AdminDashboard> {
 
         // Override with schedule's own category if available
         if (data['category'] != null) category = data['category'] as String;
-        if (data['categoryName'] != null)
+        if (data['categoryName'] != null) {
           category = data['categoryName'] as String;
+        }
 
         List<dynamic>? assignedUsers = _tournamentAssignedUsers[tournamentId];
-        if (assignedUsers == null) {
-          assignedUsers = tournamentInfo?['assignedUsers'] as List<dynamic>?;
-        }
+        assignedUsers ??= tournamentInfo?['assignedUsers'] as List<dynamic>?;
 
         final assignedOfficial = _getUserNamesString(assignedUsers);
 

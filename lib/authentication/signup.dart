@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/tabulator.dart';
-import 'package:tabulation_systemv7/screens_roles/admin_screens/admin.dart';
 import 'package:tabulation_systemv7/services/auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login.dart';
@@ -119,7 +117,6 @@ class SignUpPageState extends State<SignUpPage> {
       }
     } catch (e) {
       _showError("An error occurred: $e");
-      print("Signup error: $e");
     }
 
     if (!mounted) return;
@@ -384,18 +381,15 @@ class SignUpPageState extends State<SignUpPage> {
 
                                     if (!mounted) return;
 
-                                    Widget nextScreen;
                                     final normalizedRole =
                                         (role ?? 'Viewer').trim().toLowerCase();
                                     switch (normalizedRole) {
                                       case 'admin':
-                                        nextScreen = AdminScreen();
                                         break;
                                       case 'tournament official':
                                         // nextScreen = TechScreen();
                                         break;
                                       case 'tabulator':
-                                        nextScreen = TabulatorMain();
                                         break;
                                       case 'viewer':
                                       default:
@@ -412,7 +406,6 @@ class SignUpPageState extends State<SignUpPage> {
                                 } catch (e) {
                                   _showError(
                                       "An error occurred during Google sign-in: $e");
-                                  print("Google sign-in error: $e");
                                 }
                                 if (!mounted) return;
                                 setState(() => isLoading = false);

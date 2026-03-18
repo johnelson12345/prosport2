@@ -1,3 +1,5 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
@@ -42,7 +44,6 @@ class TabulatorDashboardService {
         'lastUpdated': DateTime.now().toString(),
       };
     } catch (e) {
-      print('Error fetching dashboard statistics: $e');
       return _getDefaultStatistics();
     }
   }
@@ -63,7 +64,6 @@ class TabulatorDashboardService {
 
       return count;
     } catch (e) {
-      print('Error fetching total tournaments: $e');
       return 0;
     }
   }
@@ -74,7 +74,6 @@ class TabulatorDashboardService {
       final snapshot = await _firestore.collection('tournaments').get();
       return snapshot.docs.length;
     } catch (e) {
-      print('Error fetching active tournaments: $e');
       return 0;
     }
   }
@@ -93,7 +92,6 @@ class TabulatorDashboardService {
       final snapshot = await _firestore.collection('team_schedules').get();
       return snapshot.docs.length;
     } catch (e) {
-      print('Error fetching total matches: $e');
       return 0;
     }
   }
@@ -107,7 +105,6 @@ class TabulatorDashboardService {
           .get();
       return snapshot.docs.length;
     } catch (e) {
-      print('Error fetching completed matches: $e');
       return 0;
     }
   }
@@ -133,7 +130,6 @@ class TabulatorDashboardService {
 
       return pendingScoreCount;
     } catch (e) {
-      print('Error fetching pending scores: $e');
       return 0;
     }
   }
@@ -144,7 +140,6 @@ class TabulatorDashboardService {
       final snapshot = await _firestore.collection('teams').get();
       return snapshot.docs.length;
     } catch (e) {
-      print('Error fetching total teams: $e');
       return 0;
     }
   }
@@ -155,7 +150,6 @@ class TabulatorDashboardService {
       final snapshot = await _firestore.collection('participants').get();
       return snapshot.docs.length;
     } catch (e) {
-      print('Error fetching total participants: $e');
       return 0;
     }
   }
@@ -166,7 +160,6 @@ class TabulatorDashboardService {
       final snapshot = await _firestore.collection('sports_categories').get();
       return snapshot.docs.length;
     } catch (e) {
-      print('Error fetching tournament categories: $e');
       return 0;
     }
   }
@@ -193,7 +186,6 @@ class TabulatorDashboardService {
         };
       }).toList();
     } catch (e) {
-      print('Error fetching recent matches: $e');
       return [];
     }
   }
@@ -220,7 +212,6 @@ class TabulatorDashboardService {
         };
       }).toList();
     } catch (e) {
-      print('Error fetching upcoming matches: $e');
       return [];
     }
   }
@@ -239,7 +230,6 @@ class TabulatorDashboardService {
 
       return statusCounts;
     } catch (e) {
-      print('Error fetching tournament status summary: $e');
       return {};
     }
   }
@@ -258,7 +248,6 @@ class TabulatorDashboardService {
 
       return statusCounts;
     } catch (e) {
-      print('Error fetching match status summary: $e');
       return {};
     }
   }
@@ -324,7 +313,6 @@ class TabulatorDashboardService {
 
       return teams;
     } catch (e) {
-      print('Error fetching team performance summary: $e');
       return [];
     }
   }
