@@ -22,6 +22,10 @@ class _ResultsVerificationState extends State<ResultsVerification>
   final DateFormat _displayTimeFormat = DateFormat('hh:mm a');
   final Map<String, String> _teamLogos = {};
 
+  // Custom colors
+  static const Color buttonColor = Color.fromARGB(255, 5, 18, 37);
+  static const Color accentColor = Color.fromARGB(255, 255, 255, 255); // White for text/icons on dark bg
+
   DateTime _selectedDate = DateTime.now();
   String? _currentUserId;
   
@@ -39,6 +43,9 @@ class _ResultsVerificationState extends State<ResultsVerification>
   String _searchQuery = '';
   String? _filterTournamentId;
   bool _showAllDates = false;
+  
+  // Status filter - using PopupMenu
+  VerificationStatus? _filterStatus;
 
   // Store verification status from Firebase
   final Map<String, VerificationStatus> _verificationStatus = {};
@@ -46,12 +53,103 @@ class _ResultsVerificationState extends State<ResultsVerification>
 
   // All matches flattened from all tournaments
   List<Map<String, dynamic>> _allMatches = [];
+  
+  // Dynamic pagination variables
+  int _itemsPerPage = 20; // Default items per page
+  final List<int> _itemsPerPageOptions = [10, 20, 50, 100, 200];
+  int _currentPage = 1;
+  List<Map<String, dynamic>> _paginatedMatches = [];
+  bool _isLoadingMore = false;
+  bool _hasMoreMatches = true;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadCurrentUser();
     _loadTournamentsFromFirebase();
+    
+    // Initialize maps
+    _verificationStatus.clear();
+    _verificationHistory.clear();
+    
+    // Add scroll listener for pagination
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= 
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreMatches();
+    }
+  }
+
+  void _loadMoreMatches() {
+    if (!_hasMoreMatches || _isLoadingMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    // Simulate loading delay
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() {
+          final startIndex = _currentPage * _itemsPerPage;
+          final endIndex = startIndex + _itemsPerPage;
+          final filteredMatches = _filterMatches();
+          
+          if (startIndex < filteredMatches.length) {
+            final newMatches = filteredMatches.sublist(
+              startIndex, 
+              endIndex > filteredMatches.length ? filteredMatches.length : endIndex
+            );
+            _paginatedMatches.addAll(newMatches);
+            _currentPage++;
+            _hasMoreMatches = endIndex < filteredMatches.length;
+          } else {
+            _hasMoreMatches = false;
+          }
+          
+          _isLoadingMore = false;
+        });
+      }
+    });
+  }
+
+  void _resetPagination() {
+    setState(() {
+      _currentPage = 1;
+      _hasMoreMatches = true;
+      _isLoadingMore = false;
+      _updatePaginatedMatches();
+    });
+  }
+
+  void _updatePaginatedMatches() {
+    final filteredMatches = _filterMatches();
+    final endIndex = _itemsPerPage > filteredMatches.length 
+        ? filteredMatches.length 
+        : _itemsPerPage;
+    
+    _paginatedMatches = filteredMatches.sublist(0, endIndex);
+    _hasMoreMatches = filteredMatches.length > _itemsPerPage;
+    _currentPage = 1;
+  }
+
+  void _changeItemsPerPage(int? newValue) {
+    if (newValue != null) {
+      setState(() {
+        _itemsPerPage = newValue;
+        _resetPagination();
+      });
+    }
   }
 
   void _loadCurrentUser() {
@@ -143,8 +241,8 @@ class _ResultsVerificationState extends State<ResultsVerification>
         gradient: useGradient
             ? LinearGradient(
                 colors: [
-                  Colors.deepOrange.shade400,
-                  Colors.deepOrange.shade600
+                  buttonColor,
+                  buttonColor.withOpacity(0.8),
                 ],
               )
             : null,
@@ -168,7 +266,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
           style: TextStyle(
             fontSize: size * 0.4,
             fontWeight: FontWeight.bold,
-            color: useGradient ? Colors.white : Colors.grey.shade600,
+            color: accentColor,
           ),
         ),
       ),
@@ -220,6 +318,8 @@ class _ResultsVerificationState extends State<ResultsVerification>
         print('  - Number of matchups: ${matchups.length}');
         
         for (var matchup in matchups) {
+          if (matchup == null) continue;
+          
           // Add tournament info to each match
           final matchWithTournament = Map<String, dynamic>.from(matchup);
           matchWithTournament['tournamentName'] = tournamentName;
@@ -230,8 +330,8 @@ class _ResultsVerificationState extends State<ResultsVerification>
           allMatches.add(matchWithTournament);
           
           // Load verification status
-          final matchId = matchup['id'];
-          if (matchId != null) {
+          final matchId = matchup['id'] as String?;
+          if (matchId != null && matchId.isNotEmpty) {
             final verificationStatus = matchup['verificationStatus'];
             if (verificationStatus != null) {
               switch (verificationStatus.toString().toLowerCase()) {
@@ -244,12 +344,16 @@ class _ResultsVerificationState extends State<ResultsVerification>
                 case 'pending':
                   _verificationStatus[matchId] = VerificationStatus.pending;
                   break;
+                default:
+                  _verificationStatus[matchId] = VerificationStatus.pending;
               }
             }
             
-            final history = matchup['verificationHistory'] as List? ?? [];
-            if (history.isNotEmpty) {
-              _verificationHistory[matchId] = List<Map<String, dynamic>>.from(history);
+            final history = matchup['verificationHistory'] as List?;
+            if (history != null && history.isNotEmpty) {
+              _verificationHistory[matchId] = List<Map<String, dynamic>>.from(
+                history.where((item) => item != null)
+              );
             }
           }
         }
@@ -268,6 +372,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
           _tournaments.addAll(tournaments);
           _allMatches = allMatches;
           _isLoading = false;
+          _updatePaginatedMatches();
         });
       }
     }, onError: (error) {
@@ -323,14 +428,33 @@ class _ResultsVerificationState extends State<ResultsVerification>
   VerificationStatus _determineMatchStatus(Map<String, dynamic> match) {
     final matchId = match['id'] ?? '';
 
-    if (_verificationStatus.containsKey(matchId)) {
-      return _verificationStatus[matchId]!;
+    // Check if we have a stored verification status
+    if (matchId.isNotEmpty && _verificationStatus.containsKey(matchId)) {
+      final status = _verificationStatus[matchId];
+      if (status != null) {
+        return status;
+      }
     }
 
+    // Check if match has verificationStatus field directly
+    final directStatus = match['verificationStatus'];
+    if (directStatus != null) {
+      switch (directStatus.toString().toLowerCase()) {
+        case 'verified':
+          return VerificationStatus.verified;
+        case 'ready':
+          return VerificationStatus.ready;
+        case 'pending':
+          return VerificationStatus.pending;
+      }
+    }
+
+    // Check if it's a placeholder match
     if (_isPlaceholderMatch(match)) {
       return VerificationStatus.pending;
     }
 
+    // Check if match has scores
     final hasScores = match['scores'] != null ||
         (match['team1Score'] != null && match['team2Score'] != null);
 
@@ -490,6 +614,9 @@ class _ResultsVerificationState extends State<ResultsVerification>
           if (matchIndex != -1) {
             _allMatches[matchIndex]['verificationStatus'] = newStatus.toString().split('.').last;
           }
+          
+          // Update paginated matches
+          _updatePaginatedMatches();
         });
       }
 
@@ -531,6 +658,28 @@ class _ResultsVerificationState extends State<ResultsVerification>
     }
   }
 
+  IconData _getStatusIcon(VerificationStatus status) {
+    switch (status) {
+      case VerificationStatus.verified:
+        return Icons.verified;
+      case VerificationStatus.ready:
+        return Icons.play_circle_filled;
+      case VerificationStatus.pending:
+        return Icons.hourglass_empty;
+    }
+  }
+
+  String _getStatusText(VerificationStatus status) {
+    switch (status) {
+      case VerificationStatus.verified:
+        return 'Verified';
+      case VerificationStatus.ready:
+        return 'Ready';
+      case VerificationStatus.pending:
+        return 'Pending';
+    }
+  }
+
   Map<VerificationStatus, int> _getOverallStatusCounts() {
     final counts = {
       VerificationStatus.verified: 0,
@@ -539,8 +688,14 @@ class _ResultsVerificationState extends State<ResultsVerification>
     };
 
     for (var match in _allMatches) {
-      final status = _determineMatchStatus(match);
-      counts[status] = (counts[status] ?? 0) + 1;
+      try {
+        final status = _determineMatchStatus(match);
+        counts[status] = (counts[status] ?? 0) + 1;
+      } catch (e) {
+        print('Error determining status for match: $e');
+        // Default to pending if there's an error
+        counts[VerificationStatus.pending] = (counts[VerificationStatus.pending] ?? 0) + 1;
+      }
     }
 
     return counts;
@@ -549,46 +704,79 @@ class _ResultsVerificationState extends State<ResultsVerification>
   List<Map<String, dynamic>> _filterMatches() {
     print('\n🔍 ===== FILTERING MATCHES =====');
     print('Total matches: ${_allMatches.length}');
+    print('Status filter: $_filterStatus');
     
     final filtered = _allMatches.where((match) {
-      final tournamentId = match['tournamentSetupId'];
-      
-      // Filter by selected tournament
-      if (_filterTournamentId != null && _filterTournamentId != tournamentId) {
+      try {
+        final tournamentId = match['tournamentSetupId'] as String?;
+        
+        // Filter by selected tournament
+        if (_filterTournamentId != null && 
+            _filterTournamentId!.isNotEmpty && 
+            tournamentId != _filterTournamentId) {
+          return false;
+        }
+
+        // Filter by status
+        if (_filterStatus != null) {
+          final matchStatus = _determineMatchStatus(match);
+          if (matchStatus != _filterStatus) {
+            return false;
+          }
+        }
+
+        // Filter by date
+        if (!_showAllDates) {
+          final dateTimeStr = match['dateTime'] ?? match['startTime'];
+          final matchDateTime = _parseMatchDateTime(dateTimeStr as String?);
+          if (matchDateTime == null) return false;
+
+          final isOnSelectedDate = matchDateTime.year == _selectedDate.year &&
+              matchDateTime.month == _selectedDate.month &&
+              matchDateTime.day == _selectedDate.day;
+
+          if (!isOnSelectedDate) return false;
+        }
+
+        // Filter by search query
+        if (_searchQuery.isNotEmpty) {
+          final team1 = match['team1'] as Map<String, dynamic>? ?? {};
+          final team2 = match['team2'] as Map<String, dynamic>? ?? {};
+          final team1Name = _getTeamDisplayName(team1, match);
+          final team2Name = _getTeamDisplayName(team2, match);
+          final matchNumber = match['matchNumber']?.toString() ?? '';
+
+          final query = _searchQuery.toLowerCase();
+          return team1Name.toLowerCase().contains(query) ||
+              team2Name.toLowerCase().contains(query) ||
+              matchNumber.contains(_searchQuery);
+        }
+
+        return true;
+      } catch (e) {
+        print('Error filtering match: $e');
         return false;
       }
-
-      // Filter by date
-      if (!_showAllDates) {
-        final dateTimeStr = match['dateTime'] ?? match['startTime'];
-        final matchDateTime = _parseMatchDateTime(dateTimeStr);
-        if (matchDateTime == null) return false;
-
-        final isOnSelectedDate = matchDateTime.year == _selectedDate.year &&
-            matchDateTime.month == _selectedDate.month &&
-            matchDateTime.day == _selectedDate.day;
-
-        if (!isOnSelectedDate) return false;
-      }
-
-      // Filter by search query
-      if (_searchQuery.isNotEmpty) {
-        final team1 = match['team1'] as Map<String, dynamic>? ?? {};
-        final team2 = match['team2'] as Map<String, dynamic>? ?? {};
-        final team1Name = _getTeamDisplayName(team1, match);
-        final team2Name = _getTeamDisplayName(team2, match);
-        final matchNumber = match['matchNumber']?.toString() ?? '';
-
-        return team1Name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            team2Name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            matchNumber.contains(_searchQuery);
-      }
-
-      return true;
     }).toList();
     
     print('✅ Filtered matches: ${filtered.length}');
     return filtered;
+  }
+
+  void _clearStatusFilter() {
+    setState(() {
+      _filterStatus = null;
+      _resetPagination();
+    });
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _filterStatus = null;
+      _filterTournamentId = null;
+      _searchQuery = '';
+      _resetPagination();
+    });
   }
 
   @override
@@ -604,10 +792,10 @@ class _ResultsVerificationState extends State<ResultsVerification>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.deepOrange.withOpacity(0.1),
+                color: buttonColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.verified, color: Colors.deepOrange),
+              child: const Icon(Icons.verified, color: buttonColor),
             ),
             const SizedBox(width: 12),
             const Text(
@@ -631,13 +819,167 @@ class _ResultsVerificationState extends State<ResultsVerification>
               children: [
                 _buildOverallStatusSummary(_getOverallStatusCounts()),
                 _buildFilterBar(),
+                _buildPaginationControls(),
                 Expanded(
                   child: _allMatches.isEmpty
                       ? _buildEmptyState()
-                      : _buildMatchesList(_filterMatches()),
+                      : _buildMatchesList(_paginatedMatches),
                 ),
+                if (_isLoadingMore)
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
               ],
             ),
+    );
+  }
+
+  Widget _buildPaginationControls() {
+    final filteredMatches = _filterMatches();
+    final totalItems = filteredMatches.length;
+    final startItem = ((_currentPage - 1) * _itemsPerPage) + 1;
+    final endItem = _currentPage * _itemsPerPage > totalItems 
+        ? totalItems 
+        : _currentPage * _itemsPerPage;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.white,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Items per page selector
+          Row(
+            children: [
+              const Text(
+                'Show:',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: PopupMenuButton<int>(
+                  tooltip: 'Items per page',
+                  onSelected: _changeItemsPerPage,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        Text(
+                          '$_itemsPerPage',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_drop_down,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (BuildContext context) {
+                    return _itemsPerPageOptions.map((int value) {
+                      return PopupMenuItem<int>(
+                        value: value,
+                        child: Text(
+                          '$value items',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      );
+                    }).toList();
+                  },
+                ),
+              ),
+            ],
+          ),
+          
+          // Pagination info
+          if (totalItems > 0)
+            Text(
+              '$startItem - $endItem of $totalItems',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          
+          // Page navigation
+          Row(
+            children: [
+              IconButton(
+                onPressed: _currentPage > 1 
+                    ? () {
+                        setState(() {
+                          _currentPage--;
+                          _updatePaginatedMatches();
+                        });
+                      }
+                    : null,
+                icon: Icon(
+                  Icons.chevron_left,
+                  size: 20,
+                  color: _currentPage > 1 
+                      ? buttonColor 
+                      : Colors.grey.shade300,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                splashRadius: 20,
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: buttonColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '$_currentPage',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: buttonColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _hasMoreMatches
+                    ? () {
+                        setState(() {
+                          _currentPage++;
+                          _loadMoreMatches();
+                        });
+                      }
+                    : null,
+                icon: Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: _hasMoreMatches 
+                      ? buttonColor 
+                      : Colors.grey.shade300,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                splashRadius: 20,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -665,6 +1007,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
                 counts[VerificationStatus.verified]?.toString() ?? '0',
                 Colors.green,
                 Icons.verified,
+                VerificationStatus.verified,
               ),
               const SizedBox(width: 8),
               _buildOverallStatusCard(
@@ -672,6 +1015,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
                 counts[VerificationStatus.ready]?.toString() ?? '0',
                 Colors.blue,
                 Icons.play_circle_filled,
+                VerificationStatus.ready,
               ),
               const SizedBox(width: 8),
               _buildOverallStatusCard(
@@ -679,6 +1023,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
                 counts[VerificationStatus.pending]?.toString() ?? '0',
                 Colors.orange,
                 Icons.hourglass_empty,
+                VerificationStatus.pending,
               ),
             ],
           ),
@@ -687,51 +1032,74 @@ class _ResultsVerificationState extends State<ResultsVerification>
     );
   }
 
-  Widget _buildOverallStatusCard(String label, String count, Color color, IconData icon) {
+  Widget _buildOverallStatusCard(String label, String count, Color color, IconData icon, VerificationStatus status) {
+    final isSelected = _filterStatus == status;
+    
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(icon, color: color, size: 14),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (_filterStatus == status) {
+              _filterStatus = null; // Toggle off if already selected
+            } else {
+              _filterStatus = status; // Set new filter
+            }
+            _resetPagination();
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? color : color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? color : color.withOpacity(0.3),
+              width: isSelected ? 2 : 1,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    count,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey.shade600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white.withOpacity(0.2) : color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  icon, 
+                  color: isSelected ? Colors.white : color, 
+                  size: 14,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      count,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? Colors.white : color,
+                      ),
+                    ),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isSelected ? Colors.white.withOpacity(0.9) : Colors.grey.shade600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(Icons.check_circle, color: Colors.white, size: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -754,7 +1122,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
             Icon(
               Icons.calendar_today,
               size: 14,
-              color: Colors.deepOrange.shade400,
+              color: buttonColor,
             ),
             const SizedBox(width: 4),
             Text(
@@ -794,7 +1162,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: Icon(Icons.calendar_month, color: Colors.deepOrange),
+                leading: Icon(Icons.calendar_month, color: buttonColor),
                 title: const Text('Specific Date'),
                 subtitle: const Text('Choose a specific date'),
                 onTap: () => Navigator.pop(context, 'specific'),
@@ -814,6 +1182,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
     if (action == 'all' && mounted) {
       setState(() {
         _showAllDates = true;
+        _resetPagination();
       });
       return;
     }
@@ -847,6 +1216,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
           _selectedDate = pickedDate;
           _showAllDates = false;
           _selectedMatch = null;
+          _resetPagination();
         });
       }
     }
@@ -859,7 +1229,6 @@ class _ResultsVerificationState extends State<ResultsVerification>
         child: Text('All Tournaments', style: TextStyle(fontSize: 13)),
       ),
       ..._tournaments.entries.map((entry) {
-        print('Dropdown item: ${entry.key} → ${entry.value['name']}');
         return DropdownMenuItem<String>(
           value: entry.key,
           child: Text(
@@ -875,110 +1244,304 @@ class _ResultsVerificationState extends State<ResultsVerification>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.white,
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            flex: 2,
-            child: Container(
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: TextField(
-                onChanged: (value) {
-                  setState(() {
-                    _searchQuery = value;
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search teams or match #...',
-                  hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-                  prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey.shade500),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: TextField(
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                        _resetPagination();
+                      });
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search teams or match #...',
+                      hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                      prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey.shade500),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Container(
+                width: 180,
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _filterTournamentId,
+                    hint: const Text('All Tournaments', style: TextStyle(fontSize: 13)),
+                    icon: Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+                    isExpanded: true,
+                    items: dropdownItems,
+                    onChanged: (value) {
+                      print('Selected tournament: $value');
+                      setState(() {
+                        _filterTournamentId = value;
+                        _selectedMatch = null;
+                        _resetPagination();
+                      });
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              
+              // Status Filter PopupMenuButton with custom color
+              Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _filterStatus != null ? buttonColor : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _filterStatus != null ? buttonColor : Colors.grey.shade200,
+                  ),
+                ),
+                child: PopupMenuButton<VerificationStatus?>(
+                  tooltip: 'Filter by status',
+                  onSelected: (VerificationStatus? status) {
+                    setState(() {
+                      _filterStatus = status;
+                      _resetPagination();
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.filter_list,
+                          size: 18,
+                          color: _filterStatus != null ? accentColor : Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _filterStatus != null 
+                              ? _getStatusText(_filterStatus!)
+                              : 'Status',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _filterStatus != null ? accentColor : Colors.grey.shade700,
+                            fontWeight: _filterStatus != null ? FontWeight.w500 : FontWeight.normal,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_drop_down,
+                          size: 16,
+                          color: _filterStatus != null ? accentColor : Colors.grey.shade600,
+                        ),
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (BuildContext context) => <PopupMenuEntry<VerificationStatus?>>[
+                    const PopupMenuItem<VerificationStatus?>(
+                      value: null,
+                      child: Row(
+                        children: [
+                          Icon(Icons.clear_all, size: 18, color: Colors.grey),
+                          SizedBox(width: 8),
+                          Text('All Statuses'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem<VerificationStatus?>(
+                      value: VerificationStatus.verified,
+                      child: Row(
+                        children: [
+                          Icon(Icons.verified, size: 18, color: Colors.green),
+                          const SizedBox(width: 8),
+                          const Text('Verified'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<VerificationStatus?>(
+                      value: VerificationStatus.ready,
+                      child: Row(
+                        children: [
+                          Icon(Icons.play_circle_filled, size: 18, color: Colors.blue),
+                          const SizedBox(width: 8),
+                          const Text('Ready'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<VerificationStatus?>(
+                      value: VerificationStatus.pending,
+                      child: Row(
+                        children: [
+                          Icon(Icons.hourglass_empty, size: 18, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          const Text('Pending'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Container(
-            width: 200,
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _filterTournamentId,
-                hint: const Text('All Tournaments', style: TextStyle(fontSize: 13)),
-                icon: Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
-                isExpanded: true,
-                items: dropdownItems,
-                onChanged: (value) {
-                  print('Selected tournament: $value');
-                  setState(() {
-                    _filterTournamentId = value;
-                    _selectedMatch = null;
-                  });
-                },
+          
+          // Active filter indicator
+          if (_filterStatus != null || _filterTournamentId != null || _searchQuery.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.filter_alt, size: 14, color: buttonColor),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          if (_filterStatus != null)
+                            Container(
+                              margin: const EdgeInsets.only(right: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(_filterStatus!).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: _getStatusColor(_filterStatus!).withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _getStatusIcon(_filterStatus!),
+                                    size: 10,
+                                    color: _getStatusColor(_filterStatus!),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Status: ${_getStatusText(_filterStatus!)}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: _getStatusColor(_filterStatus!),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  GestureDetector(
+                                    onTap: _clearStatusFilter,
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 12,
+                                      color: _getStatusColor(_filterStatus!),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (_filterTournamentId != null)
+                            Container(
+                              margin: const EdgeInsets.only(right: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: buttonColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: buttonColor.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Tournament: ${_tournaments[_filterTournamentId]?['name'] ?? 'Selected'}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: buttonColor,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _filterTournamentId = null;
+                                        _resetPagination();
+                                      });
+                                    },
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 12,
+                                      color: buttonColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (_searchQuery.isNotEmpty)
+                            Container(
+                              margin: const EdgeInsets.only(right: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Search: $_searchQuery',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _searchQuery = '';
+                                        _resetPagination();
+                                      });
+                                    },
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 12,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _clearAllFilters,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                      minimumSize: const Size(40, 24),
+                    ),
+                    child: Text(
+                      'Clear All',
+                      style: TextStyle(fontSize: 11, color: buttonColor),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.deepOrange.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                _buildFilterStatChip('Verified', Colors.green),
-                const SizedBox(width: 8),
-                _buildFilterStatChip('Ready', Colors.blue),
-                const SizedBox(width: 8),
-                _buildFilterStatChip('Pending', Colors.orange),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterStatChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
         ],
       ),
     );
@@ -987,25 +1550,48 @@ class _ResultsVerificationState extends State<ResultsVerification>
   Widget _buildMatchesList(List<Map<String, dynamic>> matches) {
     print('\n📋 Building matches list with ${matches.length} matches');
     
+    if (matches.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'No matches match your filters',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
     // Group by tournament
     Map<String, List<Map<String, dynamic>>> tournamentMatches = {};
+    
     for (var match in matches) {
       final tournamentId = match['tournamentSetupId'] ?? 'Unknown';
+      tournamentId.toString();
       tournamentMatches.putIfAbsent(tournamentId, () => []).add(match);
     }
 
-    print('Grouped into ${tournamentMatches.length} tournaments:');
-    tournamentMatches.forEach((id, matches) {
-      final tournamentData = _tournaments[id];
-      final name = tournamentData?['name'] ?? 'Unknown Tournament';
-      print('  - $id: "$name" (${matches.length} matches)');
-    });
+    // Sort tournaments by name for consistent display
+    final sortedEntries = tournamentMatches.entries.toList()
+      ..sort((a, b) {
+        final nameA = _tournaments[a.key]?['name']?.toString() ?? a.key;
+        final nameB = _tournaments[b.key]?['name']?.toString() ?? b.key;
+        return nameA.compareTo(nameB);
+      });
 
     return ListView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.all(16),
-      itemCount: tournamentMatches.length,
+      itemCount: sortedEntries.length,
       itemBuilder: (context, index) {
-        final entry = tournamentMatches.entries.elementAt(index);
+        final entry = sortedEntries[index];
         return _buildTournamentSection(entry.key, entry.value);
       },
     );
@@ -1049,8 +1635,8 @@ class _ResultsVerificationState extends State<ResultsVerification>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: tournamentData == null 
-                  ? Colors.red.withOpacity(0.05) 
-                  : Colors.deepOrange.withOpacity(0.05),
+                  ? Colors.orange.withOpacity(0.05)
+                  : buttonColor.withOpacity(0.05),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -1058,7 +1644,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
               border: Border(
                 bottom: BorderSide(
                   color: tournamentData == null 
-                      ? Colors.red.shade200 
+                      ? Colors.orange.shade200 
                       : Colors.grey.shade200,
                 ),
               ),
@@ -1069,15 +1655,15 @@ class _ResultsVerificationState extends State<ResultsVerification>
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: tournamentData == null 
-                        ? Colors.red 
-                        : Colors.deepOrange,
+                        ? Colors.orange 
+                        : buttonColor,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     tournamentData == null 
-                        ? Icons.warning 
+                        ? Icons.help_outline
                         : Icons.emoji_events,
-                    color: Colors.white, 
+                    color: accentColor, 
                     size: 16,
                   ),
                 ),
@@ -1092,19 +1678,19 @@ class _ResultsVerificationState extends State<ResultsVerification>
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                           color: tournamentData == null 
-                              ? Colors.red.shade700 
+                              ? Colors.orange.shade700 
                               : const Color(0xFF2D3748),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         tournamentData == null
-                            ? '⚠️ Tournament not found in Firebase'
+                            ? 'Tournament ID: $tournamentId'
                             : '$sport • $venue',
                         style: TextStyle(
                           fontSize: 12,
                           color: tournamentData == null
-                              ? Colors.red.shade400
+                              ? Colors.orange.shade400
                               : Colors.grey.shade600,
                         ),
                       ),
@@ -1432,7 +2018,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.deepOrange,
+                        color: buttonColor,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -1478,7 +2064,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
                               style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.deepOrange.shade700,
+                                color: buttonColor,
                               ),
                             ),
                           ),
@@ -1745,7 +2331,10 @@ class _ResultsVerificationState extends State<ResultsVerification>
                 const SizedBox(height: 16),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
+                  child: Text(
+                    'Close',
+                    style: TextStyle(color: buttonColor),
+                  ),
                 ),
               ],
             ),
@@ -1916,7 +2505,7 @@ class _ResultsVerificationState extends State<ResultsVerification>
               if (mounted) setState(() {});
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepOrange,
+              backgroundColor: buttonColor,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
             ),
             child: const Text('Retry'),

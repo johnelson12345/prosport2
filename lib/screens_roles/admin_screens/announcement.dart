@@ -71,7 +71,6 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
             itemCount: announcements.length,
             itemBuilder: (context, index) {
               final announcement = announcements[index];
-              print('DEBUG [Announcement UI]: Processing announcement $index: keys=${announcement.keys.toList()}');
               final timestamp = announcement['timestamp'] is Timestamp 
                   ? announcement['timestamp'] as Timestamp 
                   : null;

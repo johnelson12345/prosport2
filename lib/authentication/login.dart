@@ -55,7 +55,7 @@ class LoginPageState extends State<LoginPage> {
             nextScreen = const TournamentMain();
             break;
           case 'viewer':
-            nextScreen = const ViewerMainScreen();
+            nextScreen = const ViewerMain();
             break;
           case 'tabulator':
             nextScreen = const TabulatorMain();
@@ -307,7 +307,7 @@ class LoginPageState extends State<LoginPage> {
                                           break;
                                         case 'viewer':
                                         default:
-                                          nextScreen = const ViewerMainScreen();
+                                          nextScreen = const ViewerMain();
                                           break;
                                       }
 

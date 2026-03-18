@@ -14,6 +14,10 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   final ScheduleAnnouncementService _announcementService = ScheduleAnnouncementService();
   final DateFormat _dateFormat = DateFormat('MMM dd, yyyy HH:mm');
   
+  // Custom colors from previous conversation
+  static const Color buttonColor = Color.fromARGB(255, 5, 18, 37);
+  static const Color accentColor = Color.fromARGB(255, 255, 255, 255); // White for text/icons on dark bg
+  
   // Filter options
   String _selectedFilter = 'All';
   final List<String> _filterOptions = ['All', 'High Priority', 'Unread', 'Events'];
@@ -21,6 +25,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       // appBar: AppBar(
       //   title: const Text(
       //     'Announcements',
@@ -33,7 +38,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
       //   ),
       //   centerTitle: true,
       //   elevation: 0,
-      //   backgroundColor: Colors.blue.shade700,
+      //   backgroundColor: buttonColor, // Using the custom button color
       //   actions: [
       //     IconButton(
       //       icon: const Icon(Icons.refresh, color: Colors.white),
@@ -45,7 +50,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
       //   ],
       // ),
       body: Container(
-        color: Colors.white, // Pure white background
+        color: Colors.white,
         child: Column(
           children: [
             // Filter chips
@@ -64,14 +69,14 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                           Icon(
                             Icons.error_outline,
                             size: 64,
-                            color: Colors.red.shade400,
+                            color: buttonColor.withOpacity(0.5),
                           ),
                           const SizedBox(height: 16),
                           Text(
                             'Error: ${snapshot.error}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
-                              color: Colors.red,
+                              color: buttonColor,
                             ),
                           ),
                         ],
@@ -86,7 +91,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                         children: [
                           CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.blue.shade700,
+                              buttonColor,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -94,7 +99,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                             'Loading announcements...',
                             style: TextStyle(
                               fontSize: 16,
-                              color: Colors.grey.shade600,
+                              color: buttonColor.withOpacity(0.7),
                             ),
                           ),
                         ],
@@ -115,7 +120,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                           Icon(
                             Icons.notifications_off_rounded,
                             size: 80,
-                            color: Colors.grey.shade400,
+                            color: buttonColor.withOpacity(0.3),
                           ),
                           const SizedBox(height: 16),
                           Text(
@@ -123,7 +128,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade600,
+                              color: buttonColor.withOpacity(0.7),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -131,7 +136,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                             'Check back later for updates',
                             style: TextStyle(
                               fontSize: 14,
-                              color: Colors.grey.shade500,
+                              color: buttonColor.withOpacity(0.5),
                             ),
                           ),
                         ],
@@ -159,24 +164,14 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
         ),
       ),
       
-      // Floating action button for new announcement (optional)
-      // floatingActionButton: FloatingActionButton.extended(
-      //   onPressed: () {
-      //     // Navigate to create announcement screen
-      //     _showCreateAnnouncementDialog();
-      //   },
-      //   icon: const Icon(Icons.add_alert_rounded),
-      //   label: const Text('New'),
-      //   backgroundColor: Colors.blue.shade700,
-      //   elevation: 4,
-      // ),
+   
     );
   }
 
   Widget _buildFilterChips() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: Colors.white, // White background for filter section
+      color: Colors.white,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -192,10 +187,10 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                   });
                 },
                 backgroundColor: Colors.grey.shade100,
-                selectedColor: Colors.blue.shade700,
-                checkmarkColor: Colors.white,
+                selectedColor: buttonColor, // Using custom button color
+                checkmarkColor: accentColor, // White checkmark
                 labelStyle: TextStyle(
-                  color: _selectedFilter == filter ? Colors.white : Colors.black87,
+                  color: _selectedFilter == filter ? accentColor : buttonColor,
                   fontWeight: _selectedFilter == filter ? FontWeight.bold : FontWeight.normal,
                 ),
                 elevation: _selectedFilter == filter ? 2 : 0,
@@ -240,7 +235,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
         priorityIcon = Icons.remove;
         break;
       default:
-        priorityColor = Colors.green;
+        priorityColor = buttonColor; // Using button color for normal priority
         priorityIcon = Icons.low_priority;
     }
 
@@ -250,7 +245,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
+            color: buttonColor.withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -268,7 +263,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isRead ? Colors.grey.shade200 : Colors.blue.shade100,
+                color: isRead ? Colors.grey.shade200 : buttonColor.withOpacity(0.3),
                 width: 1.5,
               ),
             ),
@@ -335,15 +330,15 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
+                              color: buttonColor.withOpacity(0.05),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade200),
+                              border: Border.all(color: buttonColor.withOpacity(0.2)),
                             ),
                             child: Text(
                               formattedDate,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade600,
+                                color: buttonColor.withOpacity(0.7),
                               ),
                             ),
                           ),
@@ -355,11 +350,11 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                       if (announcement['message'] != null) ...[
                         Text(
                           announcement['message'],
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                             height: 1.5,
-                            color: Colors.black87,
+                            color: buttonColor.withOpacity(0.9),
                           ),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
@@ -381,12 +376,12 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                             _buildTag(
                               icon: Icons.access_time,
                               label: announcement['time'],
-                              color: Colors.blue.shade600,
+                              color: buttonColor,
                             ),
                           _buildTag(
                             icon: isRead ? Icons.done_all : Icons.mark_chat_unread,
                             label: isRead ? 'Read' : 'Unread',
-                            color: isRead ? Colors.green : Colors.orange,
+                            color: isRead ? Colors.green : buttonColor,
                           ),
                         ],
                       ),
@@ -401,13 +396,13 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                             'Tap for details',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade400,
+                              color: buttonColor.withOpacity(0.4),
                             ),
                           ),
                           Icon(
                             Icons.arrow_forward_ios,
                             size: 12,
-                            color: Colors.grey.shade400,
+                            color: buttonColor.withOpacity(0.4),
                           ),
                         ],
                       ),
@@ -458,13 +453,13 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   Color _getTypeColor(String type) {
     switch (type) {
       case 'Event':
-        return Colors.purple;
+        return buttonColor; // Using button color instead of purple
       case 'Alert':
         return Colors.red;
       case 'Update':
         return Colors.blue;
       default:
-        return Colors.orange;
+        return buttonColor.withOpacity(0.8);
     }
   }
 
@@ -481,111 +476,189 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
     }
   }
 
+  // FIXED: Changed from bottom sheet to centered dialog
   void _showAnnouncementDetails(Map<String, dynamic> announcement, String formattedDate) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(30),
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
+          elevation: 16,
+          backgroundColor: Colors.white,
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.9,
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      announcement['type'] ?? 'Announcement',
+            padding: const EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header with close button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: buttonColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.announcement,
+                              color: buttonColor,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            announcement['type'] ?? 'Announcement',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: buttonColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Date and time
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: buttonColor.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.access_time, color: buttonColor, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          formattedDate,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: buttonColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Message
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: buttonColor.withOpacity(0.2)),
+                    ),
+                    child: Text(
+                      announcement['message'] ?? 'No message content',
                       style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: _getTypeColor(announcement['type'] ?? 'Announcement'),
+                        fontSize: 16,
+                        height: 1.6,
+                        color: buttonColor.withOpacity(0.9),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      formattedDate,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                      ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Additional Information
+                  Text(
+                    'Additional Information',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: buttonColor,
                     ),
-                    const SizedBox(height: 24),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  
+                  // Info rows
+                  _buildInfoRow('Priority', announcement['priority'] ?? 'normal'),
+                   Divider(height: 1, color: Colors.grey.shade200),
+                  _buildInfoRow('Time', announcement['time'] ?? 'Not specified'),
+                  Divider(height: 1, color: Colors.grey.shade200),
+                  _buildInfoRow('Status', announcement['isRead'] ?? false ? 'Read' : 'Unread'),
+                  Divider(height: 1, color: Colors.grey.shade200),
+                  if (announcement['tournamentName'] != null)
+                    _buildInfoRow('Tournament', announcement['tournamentName']),
+                  if (announcement['sportName'] != null)
+                    _buildInfoRow('Sport', announcement['sportName']),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Close button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: buttonColor,
+                        foregroundColor: accentColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
-                      child: Text(
-                        announcement['message'] ?? 'No message content',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          height: 1.6,
-                          color: Colors.black87,
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Additional Information',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildInfoRow('Priority', announcement['priority'] ?? 'normal'),
-                    _buildInfoRow('Time', announcement['time'] ?? 'Not specified'),
-                    _buildInfoRow('Status', announcement['isRead'] ?? false ? 'Read' : 'Unread'),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
             style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade700,
+              fontSize: 15,
+              color: buttonColor.withOpacity(0.7),
             ),
           ),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.black87,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: buttonColor,
             ),
           ),
         ],
@@ -594,25 +667,60 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   }
 
   void _showCreateAnnouncementDialog() {
-    // Implement your create announcement dialog here
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create Announcement'),
-        content: const Text('Add your announcement creation form here'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          width: MediaQuery.of(context).size.width * 0.5,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Create Announcement',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: buttonColor,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'This feature is coming soon!',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(color: buttonColor),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      // Save announcement
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: buttonColor,
+                      foregroundColor: accentColor,
+                    ),
+                    child: const Text('Create'),
+                  ),
+                ],
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              // Save announcement
-              Navigator.pop(context);
-            },
-            child: const Text('Create'),
-          ),
-        ],
+        ),
       ),
     );
   }
