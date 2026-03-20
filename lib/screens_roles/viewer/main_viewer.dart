@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_matrix_view.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/announcements.dart';
 import 'package:tabulation_systemv7/services/auth.dart';
 import 'package:tabulation_systemv7/services/sports_event_service.dart';
@@ -175,6 +176,10 @@ class _ViewerMainState extends State<ViewerMain>
     switch (_selectedScreen) {
       case 'Announcements':
         return const AnnouncementsScreen();
+      case 'Schedules':
+        return const TournamentCalendarScreen();
+      
+         
      
       default:
         return const Center(
@@ -289,7 +294,9 @@ class _ViewerMainState extends State<ViewerMain>
                     case 'Announcements':
                       iconData = Icons.announcement;
                       break;
-                    
+                    case 'Schedules':
+                      iconData = Icons.event;
+                      break;
                     default:
                       iconData = Icons.circle;
                   }
@@ -580,15 +587,10 @@ class _ViewerMainState extends State<ViewerMain>
                     case 'Announcements':
                       iconData = Icons.announcement;
                       break;
-                    case 'Results Mngmt':
-                      iconData = Icons.verified;
+                    case 'Schedules':
+                      iconData = Icons.event;
                       break;
-                    case 'Medal Tally':
-                      iconData = Icons.workspace_premium;
-                      break;
-                    case 'Reports':
-                      iconData = Icons.report;
-                      break;
+                   
                     default:
                       iconData = Icons.circle;
                   }
