@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:tabulation_systemv7/services/team_schedule_service.dart';
 import 'package:intl/intl.dart';
 
 class TournamentOfficialBracketDialog extends StatefulWidget {
@@ -14,7 +13,7 @@ class TournamentOfficialBracketDialog extends StatefulWidget {
   });
 
   @override
-  _TournamentOfficialBracketDialogState createState() =>
+  State<TournamentOfficialBracketDialog> createState() =>
       _TournamentOfficialBracketDialogState();
 
   static Future<void> show({
@@ -35,12 +34,15 @@ class TournamentOfficialBracketDialog extends StatefulWidget {
 
 class _TournamentOfficialBracketDialogState
     extends State<TournamentOfficialBracketDialog> {
-  final TeamScheduleService _service = TeamScheduleService();
   List<Map<String, dynamic>> _matchups = [];
   bool _isLoading = true;
+  String? _error;
 
-  // Cache for resolved team names
-  final Map<String, String> _teamNameCache = {};
+  // Cache for participant names
+  final Map<String, String> _participantNameCache = {};
+  
+  // Cache for resolved match results - key: matchNumber, value: {team1, team2, winner, loser}
+  final Map<int, Map<String, String>> _matchResults = {};
 
   // Bracket structure
   late Map<int, List<Map<String, dynamic>>> _rounds;
@@ -53,18 +55,51 @@ class _TournamentOfficialBracketDialogState
   }
 
   Future<void> _loadBracketData() async {
-    try {
-      final allSchedules = await _service.getAllTeamSchedules().first;
-      final schedules = allSchedules
-          .where((s) => s['tournamentSetupId'] == widget.tournamentId)
-          .toList();
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
-      // Sort by match number
+    try {
+      final tournamentQuery = await FirebaseFirestore.instance
+          .collection('tournaments')
+          .where('id', isEqualTo: widget.tournamentId)
+          .limit(1)
+          .get();
+
+      if (tournamentQuery.docs.isEmpty) {
+        setState(() {
+          _error = 'Tournament not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final tournamentDoc = tournamentQuery.docs.first;
+      final tournamentData = tournamentDoc.data();
+      final matchups = tournamentData['matchups'] as List<dynamic>? ?? [];
+
+      List<Map<String, dynamic>> schedules = [];
+      for (var matchup in matchups) {
+        final match = Map<String, dynamic>.from(matchup as Map);
+        match['tournamentSetupId'] = tournamentData['id'];
+        match['tournamentName'] = tournamentData['name'] ?? 'Unnamed Tournament';
+        schedules.add(match);
+      }
+
       schedules.sort((a, b) {
         final aNum = a['matchNumber'] ?? 999;
         final bNum = b['matchNumber'] ?? 999;
         return aNum.compareTo(bNum);
       });
+
+      // First, load all participant names from Firestore
+      await _loadAllParticipantNames(schedules);
+      
+      // Then, process matches in order to build results cache
+      for (var match in schedules) {
+        await _processMatch(match);
+      }
 
       setState(() {
         _matchups = schedules;
@@ -73,23 +108,67 @@ class _TournamentOfficialBracketDialogState
       });
     } catch (e) {
       setState(() {
+        _error = 'Error loading bracket: $e';
         _isLoading = false;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading bracket: $e')),
-        );
-      }
     }
   }
 
-  // Query Firestore directly to get participant name by ID
+  Future<void> _loadAllParticipantNames(List<Map<String, dynamic>> schedules) async {
+    // Collect all participant IDs from all matches
+    Set<String> participantIds = {};
+    
+    for (var match in schedules) {
+      // Get from team1 and team2 objects
+      if (match['team1'] is Map && match['team1']['id'] != null) {
+        String id = match['team1']['id'].toString();
+        if (!id.contains('match_') && !id.contains('winner') && !id.contains('loser')) {
+          participantIds.add(id);
+        }
+      }
+      if (match['team2'] is Map && match['team2']['id'] != null) {
+        String id = match['team2']['id'].toString();
+        if (!id.contains('match_') && !id.contains('winner') && !id.contains('loser')) {
+          participantIds.add(id);
+        }
+      }
+      
+      // Get from team1Id and team2Id fields
+      if (match['team1Id'] != null) {
+        String id = match['team1Id'].toString();
+        if (!id.contains('match_') && !id.contains('winner') && !id.contains('loser')) {
+          participantIds.add(id);
+        }
+      }
+      if (match['team2Id'] != null) {
+        String id = match['team2Id'].toString();
+        if (!id.contains('match_') && !id.contains('winner') && !id.contains('loser')) {
+          participantIds.add(id);
+        }
+      }
+      
+      // Get from scores map keys (they might be team names or IDs)
+      if (match['scores'] != null) {
+        final scores = match['scores'] as Map<String, dynamic>;
+        for (var key in scores.keys) {
+          if (key.contains('-') || key.length > 10) {
+            participantIds.add(key);
+          }
+        }
+      }
+    }
+    
+    // Fetch all participant names
+    for (var id in participantIds) {
+      await _getParticipantName(id);
+    }
+  }
+
   Future<String> _getParticipantName(String participantId) async {
     if (participantId.isEmpty || participantId == 'null') return 'TBD';
     
-    // Check cache first
-    if (_teamNameCache.containsKey(participantId)) {
-      return _teamNameCache[participantId]!;
+    if (_participantNameCache.containsKey(participantId)) {
+      return _participantNameCache[participantId]!;
     }
     
     try {
@@ -100,299 +179,273 @@ class _TournamentOfficialBracketDialogState
       
       if (doc.exists) {
         Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-        String name = data['name'] ?? data['teamName'] ?? data['coachName'] ?? 'Unknown';
-        _teamNameCache[participantId] = name;
+        String name = data['name'] ?? data['teamName'] ?? 'Unknown';
+        // Remove "Seed X" suffix
+        name = name.replaceAll(RegExp(r'\s*\(Seed \d+\)\s*'), '');
+        _participantNameCache[participantId] = name;
         return name;
       }
-    } catch (e) {
-      // Silently handle missing participant
-    }
-    _teamNameCache[participantId] = participantId;
-    return participantId; // Return ID if not found
+    } catch (e) {}
+    _participantNameCache[participantId] = participantId;
+    return participantId;
   }
-// Get team name - handles placeholders and actual teams
-Future<String> _getTeamName(dynamic team) async {
-  if (team == null) return 'TBD';
-  
-  // If team is a map
-  if (team is Map<String, dynamic>) {
-    // Check if it's a placeholder
-    if (team['isPlaceholder'] == true) {
-      // Get the source match number
-      int? sourceMatchNumber;
-      
-      // Try different ways to get the source match
-      if (team['sourceMatch'] != null) {
-        sourceMatchNumber = team['sourceMatch'] is int 
-            ? team['sourceMatch'] 
-            : int.tryParse(team['sourceMatch'].toString());
-      } else if (team['sourceMatchNumber'] != null) {
-        sourceMatchNumber = team['sourceMatchNumber'] is int
-            ? team['sourceMatchNumber']
-            : int.tryParse(team['sourceMatchNumber'].toString());
-      }
-      
-      if (sourceMatchNumber != null) {
-        // Find the source match
-        final sourceMatch = _matchups.firstWhere(
-          (m) => m['matchNumber'] == sourceMatchNumber,
-          orElse: () => {},
-        );
-        
-        if (sourceMatch.isNotEmpty) {
-          // Check if we need winner or loser
-          bool needWinner = team['name']?.toString().contains('Winner') ?? 
-                           team['displayName']?.toString().contains('Winner') ?? 
-                           team['type'] == 'winner' ?? false;
-          
-          if (needWinner) {
-            // If source match has a winner, return that team's name
-            if (sourceMatch['winner'] != null) {
-              return await _getTeamName(sourceMatch['winner']);
-            }
-            
-            // No winner yet, show the teams that will play
-            String team1Name = await _getTeamName(sourceMatch['team1']);
-            String team2Name = await _getTeamName(sourceMatch['team2']);
-            
-            // Remove any "TBD" or placeholder text for cleaner display
-            team1Name = _cleanTeamName(team1Name);
-            team2Name = _cleanTeamName(team2Name);
-            
-            return 'Winner: $team1Name vs $team2Name';
-          } else {
-            // Need loser
-            if (sourceMatch['loser'] != null) {
-              return await _getTeamName(sourceMatch['loser']);
-            }
-            
-            // No loser yet, show the teams
-            String team1Name = await _getTeamName(sourceMatch['team1']);
-            String team2Name = await _getTeamName(sourceMatch['team2']);
-            
-            team1Name = _cleanTeamName(team1Name);
-            team2Name = _cleanTeamName(team2Name);
-            
-            return 'Loser: $team1Name vs $team2Name';
-          }
-        }
-      }
-      
-      // If we can't resolve, return a cleaned version of the display name
-      String displayName = team['displayName'] ?? team['name'] ?? 'TBD';
-      return _cleanTeamName(displayName);
-    }
-    
-    // Regular team with ID - get from Firestore
-    if (team.containsKey('id') && team['id'] != null) {
-      String id = team['id'].toString();
-      
-      // Check if it's a placeholder ID
-      if (id.contains('match_') || id.contains('placeholder')) {
-        // This might be a placeholder masquerading as a regular team
-        // Try to extract match number from ID
-        final matchRegex = RegExp(r'match_(\d+)_');
-        final matchMatch = matchRegex.firstMatch(id);
-        if (matchMatch != null) {
-          int matchNum = int.parse(matchMatch.group(1)!);
-          final sourceMatch = _matchups.firstWhere(
-            (m) => m['matchNumber'] == matchNum,
-            orElse: () => {},
-          );
-          if (sourceMatch.isNotEmpty) {
-            if (id.contains('winner')) {
-              if (sourceMatch['winner'] != null) {
-                return await _getTeamName(sourceMatch['winner']);
-              }
-            } else if (id.contains('loser')) {
-              if (sourceMatch['loser'] != null) {
-                return await _getTeamName(sourceMatch['loser']);
-              }
-            }
-          }
-        }
-      }
-      
-      // Regular participant ID
-      return await _getParticipantName(id);
-    }
-    
-    // Team with direct name
-    if (team.containsKey('name') && team['name'] != null) {
-      String name = team['name'].toString();
-      if (!name.contains('Match') && !name.contains('Winner') && !name.contains('Loser')) {
-        return name;
-      }
-    }
-    
-    if (team.containsKey('displayName') && team['displayName'] != null) {
-      String displayName = team['displayName'].toString();
-      return _cleanTeamName(displayName);
-    }
-  }
-  
-  // If team is a string
-  if (team is String) {
-    // Check if it's a placeholder string
-    if (team.contains('Winner of') || team.contains('Loser of')) {
-      // Try to extract match numbers
-      final regex = RegExp(r'Winner of Match (\d+) vs Match (\d+)');
-      final match = regex.firstMatch(team);
-      if (match != null) {
-        int match1 = int.parse(match.group(1)!);
-        int match2 = int.parse(match.group(2)!);
-        
-        // Try to find winners of these matches
-        for (var m in _matchups) {
-          if (m['matchNumber'] == match1 && m['winner'] != null) {
-            return await _getTeamName(m['winner']);
-          }
-          if (m['matchNumber'] == match2 && m['winner'] != null) {
-            return await _getTeamName(m['winner']);
-          }
-        }
-      }
-    }
-    
-    // Check if it's a Firestore ID
-    if (team.length > 15 || team.contains('-')) {
-      return await _getParticipantName(team);
-    }
-    
-    // Return as-is, but clean it
-    return _cleanTeamName(team);
-  }
-  
-  if (team is int) {
-    return await _getParticipantName(team.toString());
-  }
-  
-  return 'TBD';
-}
 
-// Helper method to clean up team names
-String _cleanTeamName(String name) {
-  if (name.contains('match_') || name.contains('_winner') || name.contains('_loser')) {
-    // Try to extract a meaningful name from the ID
-    if (name.contains('match_')) {
-      final regex = RegExp(r'match_(\d+)_(winner|loser)');
-      final match = regex.firstMatch(name);
-      if (match != null) {
-        String type = match.group(2) == 'winner' ? 'Winner' : 'Loser';
-        return '$type Match ${match.group(1)}';
+  // Get actual team name - this is the main resolver
+  Future<String> _getActualTeamName(dynamic team, Map<String, dynamic> contextMatch) async {
+    if (team == null) return 'TBD';
+    
+    // If it's a map
+    if (team is Map<String, dynamic>) {
+      // Check if it's a placeholder
+      if (team['isPlaceholder'] == true || team['type'] == 'placeholder') {
+        return await _resolvePlaceholderFromMap(team);
+      }
+      
+      // If it has an ID
+      if (team.containsKey('id') && team['id'] != null) {
+        String id = team['id'].toString();
+        return await _resolveById(id, contextMatch);
+      }
+      
+      // Direct name
+      if (team.containsKey('displayName') && team['displayName'] != null) {
+        return _cleanTeamName(team['displayName'].toString());
+      }
+      if (team.containsKey('name') && team['name'] != null) {
+        return _cleanTeamName(team['name'].toString());
       }
     }
+    
+    // If it's a string
+    if (team is String) {
+      return await _resolveByString(team, contextMatch);
+    }
+    
     return 'TBD';
   }
-  return name;
-}
 
-  // Get winner name
-Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async {
-  if (winner == null) return 'TBD';
-  
-  // If winner is a map
-  if (winner is Map<String, dynamic>) {
-    return await _getTeamName(winner);
+  Future<String> _resolvePlaceholderFromMap(Map<String, dynamic> placeholder) async {
+    int? sourceMatchNum;
+    bool needWinner = true;
+    
+    // Get source match number
+    if (placeholder['sourceMatch'] != null) {
+      sourceMatchNum = placeholder['sourceMatch'] is int 
+          ? placeholder['sourceMatch'] 
+          : int.tryParse(placeholder['sourceMatch'].toString());
+    }
+    
+    // Determine if we need winner or loser
+    needWinner = placeholder['name']?.toString().contains('Winner') ?? 
+                 placeholder['displayName']?.toString().contains('Winner') ?? 
+                 placeholder['type'] == 'winner' ?? true;
+    
+    if (sourceMatchNum != null && _matchResults.containsKey(sourceMatchNum)) {
+      if (needWinner) {
+        return _matchResults[sourceMatchNum]!['winner'] ?? 'TBD';
+      } else {
+        return _matchResults[sourceMatchNum]!['loser'] ?? 'TBD';
+      }
+    }
+    
+    return placeholder['displayName'] ?? placeholder['name'] ?? 'TBD';
   }
-  
-  // If winner is a string (could be ID)
-  if (winner is String) {
-    // Check if it's a placeholder
-    if (winner.contains('match_') || winner.contains('winner') || winner.contains('loser')) {
-      // Try to find the actual team in the match
-      if (match['team1'] != null) {
-        String team1Id = _getTeamId(match['team1']);
-        if (team1Id == winner) {
-          return await _getTeamName(match['team1']);
+
+  Future<String> _resolveById(String id, Map<String, dynamic> contextMatch) async {
+    // Check if it's a placeholder ID like match_1_winner
+    final regex = RegExp(r'match_(\d+)_(winner|loser)');
+    final match = regex.firstMatch(id);
+    if (match != null) {
+      int sourceMatchNum = int.parse(match.group(1)!);
+      bool needWinner = match.group(2) == 'winner';
+      if (_matchResults.containsKey(sourceMatchNum)) {
+        return needWinner 
+            ? _matchResults[sourceMatchNum]!['winner'] ?? 'TBD'
+            : _matchResults[sourceMatchNum]!['loser'] ?? 'TBD';
+      }
+    }
+    
+    // Real participant ID
+    return await _getParticipantName(id);
+  }
+
+  Future<String> _resolveByString(String teamStr, Map<String, dynamic> contextMatch) async {
+    // Check for placeholder patterns
+    final winnerRegex = RegExp(r'Winner Match (\d+)', caseSensitive: false);
+    final loserRegex = RegExp(r'Loser Match (\d+)', caseSensitive: false);
+    
+    var match = winnerRegex.firstMatch(teamStr);
+    if (match != null) {
+      int sourceMatchNum = int.parse(match.group(1)!);
+      if (_matchResults.containsKey(sourceMatchNum)) {
+        return _matchResults[sourceMatchNum]!['winner'] ?? teamStr;
+      }
+      return teamStr;
+    }
+    
+    match = loserRegex.firstMatch(teamStr);
+    if (match != null) {
+      int sourceMatchNum = int.parse(match.group(1)!);
+      if (_matchResults.containsKey(sourceMatchNum)) {
+        return _matchResults[sourceMatchNum]!['loser'] ?? teamStr;
+      }
+      return teamStr;
+    }
+    
+    // Check if it's a participant ID
+    if (teamStr.length > 10 || teamStr.contains('-')) {
+      return await _getParticipantName(teamStr);
+    }
+    
+    return _cleanTeamName(teamStr);
+  }
+
+  // Process a match and store its results in cache
+  Future<void> _processMatch(Map<String, dynamic> match) async {
+    int matchNum = match['matchNumber'] ?? 0;
+    
+    Map<String, String> results = {};
+    
+    // Get team1 name
+    if (match['team1'] != null) {
+      results['team1'] = await _getActualTeamName(match['team1'], match);
+    } else if (match['team1Name'] != null) {
+      results['team1'] = _cleanTeamName(match['team1Name'].toString());
+    } else {
+      results['team1'] = 'TBD';
+    }
+    
+    // Get team2 name
+    if (match['team2'] != null) {
+      results['team2'] = await _getActualTeamName(match['team2'], match);
+    } else if (match['team2Name'] != null) {
+      results['team2'] = _cleanTeamName(match['team2Name'].toString());
+    } else {
+      results['team2'] = 'TBD';
+    }
+    
+    // Determine winner
+    String winnerName = 'TBD';
+    
+    // Try winner field first
+    if (match['winner'] != null) {
+      winnerName = await _getActualTeamName(match['winner'], match);
+    }
+    
+    // If winner is still placeholder or TBD, try from scores
+    if (winnerName == 'TBD' || winnerName.contains('Winner') || winnerName.contains('Loser')) {
+      final scores = match['scores'] as Map<String, dynamic>?;
+      if (scores != null && scores.isNotEmpty) {
+        String? winnerKey;
+        int? highestScore;
+        for (var entry in scores.entries) {
+          int score = int.tryParse(entry.value.toString()) ?? 0;
+          if (highestScore == null || score > highestScore!) {
+            highestScore = score;
+            winnerKey = entry.key;
+          }
+        }
+        if (winnerKey != null) {
+          winnerName = await _getActualTeamName(winnerKey, match);
         }
       }
-      if (match['team2'] != null) {
-        String team2Id = _getTeamId(match['team2']);
-        if (team2Id == winner) {
-          return await _getTeamName(match['team2']);
-        }
+    }
+    
+    // If winner is still a placeholder, try to resolve from team names
+    if (winnerName.contains('Winner') || winnerName.contains('Loser')) {
+      if (results['team1'] != null && !results['team1']!.contains('Winner') && !results['team1']!.contains('Loser')) {
+        winnerName = results['team1']!;
+      } else if (results['team2'] != null && !results['team2']!.contains('Winner') && !results['team2']!.contains('Loser')) {
+        winnerName = results['team2']!;
       }
-      
-      // Try to find in previous matches
-      for (var m in _matchups) {
-        if (m['matchNumber'] == match['matchNumber'] - 1) {
-          if (m['winner'] != null) {
-            return await _getTeamName(m['winner']);
+    }
+    
+    results['winner'] = winnerName;
+    
+    // Determine loser
+    String loserName = 'TBD';
+    if (match['loser'] != null) {
+      loserName = await _getActualTeamName(match['loser'], match);
+    }
+    
+    if (loserName == 'TBD' || loserName.contains('Winner') || loserName.contains('Loser')) {
+      // Loser is the other team
+      if (winnerName == results['team1']) {
+        loserName = results['team2']!;
+      } else if (winnerName == results['team2']) {
+        loserName = results['team1']!;
+      } else {
+        // Try from scores
+        final scores = match['scores'] as Map<String, dynamic>?;
+        if (scores != null && scores.isNotEmpty) {
+          String? loserKey;
+          int? lowestScore;
+          for (var entry in scores.entries) {
+            int score = int.tryParse(entry.value.toString()) ?? 0;
+            if (lowestScore == null || score < lowestScore!) {
+              lowestScore = score;
+              loserKey = entry.key;
+            }
+          }
+          if (loserKey != null) {
+            loserName = await _getActualTeamName(loserKey, match);
           }
         }
       }
     }
     
-    // Try to find which team this winner ID belongs to
-    if (match['team1'] != null && _getTeamId(match['team1']) == winner) {
-      return await _getTeamName(match['team1']);
-    }
-    if (match['team2'] != null && _getTeamId(match['team2']) == winner) {
-      return await _getTeamName(match['team2']);
-    }
+    results['loser'] = loserName;
     
-    // Search all matches
-    for (var m in _matchups) {
-      if (m['team1'] != null && _getTeamId(m['team1']) == winner) {
-        return await _getTeamName(m['team1']);
-      }
-      if (m['team2'] != null && _getTeamId(m['team2']) == winner) {
-        return await _getTeamName(m['team2']);
-      }
-    }
-    
-    // Otherwise treat as ID
-    return await _getParticipantName(winner);
-  }
-  
-  if (winner is int) {
-    return await _getParticipantName(winner.toString());
-  }
-  
-  return winner.toString();
-}
-
-  // Get loser name
-  Future<String> _getLoserName(dynamic loser, Map<String, dynamic> match) async {
-    if (loser == null) return 'TBD';
-    return await _getTeamName(loser);
+    _matchResults[matchNum] = results;
   }
 
-  // Get team ID from various formats
-  String _getTeamId(dynamic team) {
-    if (team == null) return '';
-    
-    if (team is Map<String, dynamic>) {
-      if (team.containsKey('id')) return team['id'].toString();
-      if (team.containsKey('resolvedId')) return team['resolvedId'].toString();
-    }
-    
-    if (team is String) return team;
-    if (team is int) return team.toString();
-    
-    return '';
+  String _cleanTeamName(String name) {
+    name = name.replaceAll(RegExp(r'\s*\(Seed \d+\)\s*'), '');
+    name = name.replaceAll(RegExp(r'\s*Seed \d+\s*'), '');
+    return name;
   }
 
-  // Get team score
   String? _getTeamScore(dynamic team, Map<String, dynamic> match) {
     if (team == null) return null;
 
     final scores = match['scores'] as Map<String, dynamic>? ?? {};
-    final teamId = _getTeamId(team);
-
-    // Try various score lookup methods
-    if (teamId.isNotEmpty && scores.containsKey(teamId)) {
-      return scores[teamId].toString();
+    
+    List<String> possibleKeys = [];
+    
+    if (team is Map<String, dynamic>) {
+      if (team['displayName'] != null) possibleKeys.add(team['displayName'].toString());
+      if (team['name'] != null) possibleKeys.add(team['name'].toString());
+      if (team['id'] != null) possibleKeys.add(team['id'].toString());
+    } else if (team is String) {
+      possibleKeys.add(team);
     }
-
+    
+    if (match['team1Name'] != null) possibleKeys.add(match['team1Name'].toString());
+    if (match['team2Name'] != null) possibleKeys.add(match['team2Name'].toString());
+    
+    if (team == match['team1'] && match['team1Score'] != null) {
+      return match['team1Score'].toString();
+    }
+    if (team == match['team2'] && match['team2Score'] != null) {
+      return match['team2Score'].toString();
+    }
+    
+    for (var key in possibleKeys) {
+      if (key.isNotEmpty && scores.containsKey(key)) {
+        return scores[key].toString();
+      }
+    }
+    
+    if (scores.isNotEmpty) {
+      return scores.values.first.toString();
+    }
+    
     return null;
   }
 
   bool _isByeMatch(Map<String, dynamic> match) {
     if (match['matchType'] == 'bye') return true;
     
-    // Check for BYE in team names
     if (match['team1'] != null) {
       String team1Name = match['team1'] is Map 
           ? (match['team1']['name'] ?? '') 
@@ -416,13 +469,11 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
 
     if (_matchups.isEmpty) return;
 
-    // Group matches by round
     for (var match in _matchups) {
       final round = match['round'] ?? 1;
       _rounds.putIfAbsent(round, () => []).add(match);
     }
 
-    // Sort matches within each round by match number
     _rounds.forEach((round, matches) {
       matches.sort((a, b) {
         final aNum = a['matchNumber'] ?? 0;
@@ -431,7 +482,6 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
       });
     });
 
-    // Build connections for visual lines
     for (var match in _matchups) {
       final nextMatchRef = match['nextMatchReference'];
       final matchNumber = match['matchNumber'];
@@ -449,7 +499,6 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
     try {
       DateTime? parsedDate;
 
-      // Handle different input types
       if (dateTime is DateTime) {
         parsedDate = dateTime;
       } 
@@ -460,14 +509,12 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
         final String dateStr = dateTime.trim();
         if (dateStr.isEmpty) return 'TBD';
 
-        // Try parsing common formats (dd/MM/yyyy HH:mm)
         if (dateStr.contains('/')) {
           try {
             final parts = dateStr.split(' ');
             final dateParts = parts[0].split('/');
             
             if (dateParts.length == 3) {
-              // Assuming format dd/MM/yyyy
               final day = int.tryParse(dateParts[0]);
               final month = int.tryParse(dateParts[1]);
               final year = int.tryParse(dateParts[2]);
@@ -485,18 +532,13 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                 }
               }
             }
-          } catch (e) {
-            // Continue to next format
-          }
+          } catch (e) {}
         }
         
-        // Try ISO format
         if (parsedDate == null) {
           try {
             parsedDate = DateTime.parse(dateStr);
-          } catch (e) {
-            // Continue
-          }
+          } catch (e) {}
         }
       } 
 
@@ -617,43 +659,69 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : _matchups.isEmpty
+                  : _error != null
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                Icons.emoji_events,
-                                size: 64,
-                                color: Colors.grey.shade300,
+                                Icons.error_outline,
+                                size: 48,
+                                color: Colors.red.shade300,
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'No matchups available',
+                                _error!,
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 14,
                                   color: Colors.grey.shade600,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Add matches to see the bracket',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade500,
-                                ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: _loadBracketData,
+                                child: const Text('Retry'),
                               ),
                             ],
                           ),
                         )
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            child: _buildBracketView(),
-                          ),
-                        ),
+                      : _matchups.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.emoji_events,
+                                    size: 64,
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No matchups available',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Add matches to see the bracket',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                child: _buildBracketView(),
+                              ),
+                            ),
             ),
           ],
         ),
@@ -692,7 +760,6 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
   }) {
     String roundName;
     
-    // Determine round name based on bracket type and round number
     final firstMatch = matches.isNotEmpty ? matches.first : null;
     final bracketType = firstMatch?['bracket'];
     
@@ -774,13 +841,10 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                   final match = matches[index];
                   final matchNumber = match['matchNumber'] ?? 0;
 
-                  List<int>? prevMatches =
-                      _matchConnections[matchNumber.toString()];
-
                   return Column(
                     children: [
                       FutureBuilder<Map<String, String>>(
-                        future: _resolveMatchNames(match),
+                        future: _getMatchDisplayNames(match),
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) {
                             return Container(
@@ -799,11 +863,6 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                           
                           return _buildBracketMatchCard(
                             match: match,
-                            roundIndex: roundIndex,
-                            matchIndex: index,
-                            totalMatches: matches.length,
-                            isLastRound: isLastRound,
-                            prevMatches: prevMatches,
                             resolvedNames: snapshot.data!,
                           );
                         },
@@ -821,51 +880,64 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
     );
   }
 
-  Future<Map<String, String>> _resolveMatchNames(Map<String, dynamic> match) async {
+  Future<Map<String, String>> _getMatchDisplayNames(Map<String, dynamic> match) async {
+    int matchNum = match['matchNumber'] ?? 0;
+    
     String team1Name = 'TBD';
     String team2Name = 'TBD';
     String winnerName = 'TBD';
-    String loserName = 'TBD';
     
-    // Resolve team1
-    if (match['team1'] != null) {
-      team1Name = await _getTeamName(match['team1']);
+    // Use cached results if available
+    if (_matchResults.containsKey(matchNum)) {
+      team1Name = _matchResults[matchNum]!['team1'] ?? 'TBD';
+      team2Name = _matchResults[matchNum]!['team2'] ?? 'TBD';
+      winnerName = _matchResults[matchNum]!['winner'] ?? 'TBD';
+    } else {
+      // Process the match now
+      await _processMatch(match);
+      if (_matchResults.containsKey(matchNum)) {
+        team1Name = _matchResults[matchNum]!['team1'] ?? 'TBD';
+        team2Name = _matchResults[matchNum]!['team2'] ?? 'TBD';
+        winnerName = _matchResults[matchNum]!['winner'] ?? 'TBD';
+      }
     }
     
-    // Resolve team2
-    if (match['team2'] != null) {
-      team2Name = await _getTeamName(match['team2']);
-    }
-    
-    // Resolve winner
-    if (match['winner'] != null) {
-      winnerName = await _getWinnerName(match['winner'], match);
-    }
-    
-    // Resolve loser
-    if (match['loser'] != null) {
-      loserName = await _getLoserName(match['loser'], match);
-    }
+    // Final cleanup - ensure no placeholder text remains
+    team1Name = _finalCleanName(team1Name);
+    team2Name = _finalCleanName(team2Name);
+    winnerName = _finalCleanName(winnerName);
     
     return {
       'team1': team1Name,
       'team2': team2Name,
       'winner': winnerName,
-      'loser': loserName,
     };
+  }
+
+  String _finalCleanName(String name) {
+    if (name.contains('Winner Match') || name.contains('Loser Match')) {
+      // Try to extract the match number and resolve again
+      final regex = RegExp(r'(Winner|Loser) Match (\d+)');
+      final match = regex.firstMatch(name);
+      if (match != null) {
+        int sourceMatchNum = int.parse(match.group(2)!);
+        if (_matchResults.containsKey(sourceMatchNum)) {
+          if (match.group(1) == 'Winner') {
+            return _matchResults[sourceMatchNum]!['winner'] ?? name;
+          } else {
+            return _matchResults[sourceMatchNum]!['loser'] ?? name;
+          }
+        }
+      }
+    }
+    return name;
   }
 
   Widget _buildBracketMatchCard({
     required Map<String, dynamic> match,
-    required int roundIndex,
-    required int matchIndex,
-    required int totalMatches,
-    required bool isLastRound,
-    List<int>? prevMatches,
     required Map<String, String> resolvedNames,
   }) {
-    final matchNumber = match['matchNumber'] ?? matchIndex + 1;
-    final matchType = match['matchType'] ?? 'regular';
+    final matchNumber = match['matchNumber'] ?? 0;
     final bracket = match['bracket'] as String?;
     final isGrandFinal = match['isGrandFinal'] == true;
     final isBye = _isByeMatch(match);
@@ -877,9 +949,10 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
     String? team1Score = _getTeamScore(match['team1'], match);
     String? team2Score = _getTeamScore(match['team2'], match);
 
-    final hasWinner = match['winner'] != null;
+    final hasWinner = winnerName != 'TBD' && winnerName.isNotEmpty && 
+                      !winnerName.contains('Winner') && !winnerName.contains('Loser') &&
+                      winnerName != 'TBD';
 
-    // Determine colors based on bracket type
     Color bracketColor = Colors.blue;
     if (bracket == 'winners') {
       bracketColor = Colors.green;
@@ -889,11 +962,12 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
       bracketColor = Colors.amber;
     }
 
+    bool isTeam1Winner = team1Name == winnerName;
+    bool isTeam2Winner = team2Name == winnerName;
+
     return Container(
       width: 280,
-      margin: EdgeInsets.only(
-        bottom: matchIndex < totalMatches - 1 ? 8 : 0,
-      ),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -911,8 +985,7 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
           ),
           if (hasWinner)
             BoxShadow(
-              color: (isGrandFinal ? Colors.amber : Colors.green)
-                  .withOpacity(0.2),
+              color: (isGrandFinal ? Colors.amber : Colors.green).withOpacity(0.2),
               blurRadius: 8,
               spreadRadius: 1,
             ),
@@ -921,17 +994,11 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Match header
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 4,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: bracketColor.withOpacity(0.1),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(11),
-              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
             ),
             child: Row(
               children: [
@@ -940,9 +1007,7 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                       ? Icons.emoji_events
                       : (bracket == 'losers'
                           ? Icons.restore
-                          : (isGrandFinal
-                              ? Icons.stadium
-                              : Icons.sports)),
+                          : (isGrandFinal ? Icons.stadium : Icons.sports)),
                   size: 12,
                   color: bracketColor,
                 ),
@@ -962,32 +1027,20 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                 if (bracket != null)
                   Container(
                     margin: const EdgeInsets.only(right: 4),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 1,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.5),
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: Text(
                       bracket == 'grand' ? 'GF' : bracket[0].toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 7,
-                        fontWeight: FontWeight.bold,
-                        color: bracketColor,
-                      ),
+                      style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: bracketColor),
                     ),
                   ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: hasWinner
-                        ? Colors.green.shade100
-                        : Colors.grey.shade200,
+                    color: hasWinner ? Colors.green.shade100 : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -995,9 +1048,7 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                     style: TextStyle(
                       fontSize: 8,
                       fontWeight: FontWeight.w600,
-                      color: hasWinner
-                          ? Colors.green.shade700
-                          : Colors.grey.shade700,
+                      color: hasWinner ? Colors.green.shade700 : Colors.grey.shade700,
                     ),
                   ),
                 ),
@@ -1005,7 +1056,6 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
             ),
           ),
 
-          // Match content
           Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -1019,56 +1069,32 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                   ),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      'BYE',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                      ),
-                    ),
+                    child: Text('BYE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue)),
                   ),
                 ] else ...[
                   _buildTeamRow(
                     label: team1Name,
                     score: team1Score,
-                    isWinner: match['winner'] != null && 
-                        (_getTeamId(match['team1']) == _getTeamId(match['winner']) ||
-                         team1Name == winnerName),
+                    isWinner: isTeam1Winner,
                     isGrandFinal: isGrandFinal,
                   ),
-
                   Container(
                     margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: const Text(
-                      'VS',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
-                    ),
+                    child: const Text('VS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
                   ),
-
                   _buildTeamRow(
                     label: team2Name,
                     score: team2Score,
-                    isWinner: match['winner'] != null && 
-                        (_getTeamId(match['team2']) == _getTeamId(match['winner']) ||
-                         team2Name == winnerName),
+                    isWinner: isTeam2Winner,
                     isGrandFinal: isGrandFinal,
                   ),
                 ],
 
-                // Date/Time
                 if (match['dateTime'] != null || match['startTime'] != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(12),
@@ -1076,20 +1102,12 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.access_time,
-                            size: 10,
-                            color: Colors.grey.shade600,
-                          ),
+                          Icon(Icons.access_time, size: 10, color: Colors.grey.shade600),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               _formatDateTime(match['dateTime'] ?? match['startTime']),
-                              style: TextStyle(
-                                fontSize: 8,
-                                color: Colors.grey.shade600,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: TextStyle(fontSize: 8, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1099,36 +1117,25 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                     ),
                   ),
 
-                // Next match reference
                 if (match['nextMatchReference'] != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       '→ Advances to Match ${match['nextMatchReference']}',
-                      style: TextStyle(
-                        fontSize: 8,
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
-                      ),
+                      style: TextStyle(fontSize: 8, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
                     ),
                   ),
               ],
             ),
           ),
 
-          // Winner footer
           if (hasWinner)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                vertical: 4,
-                horizontal: 8,
-              ),
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
               decoration: BoxDecoration(
                 color: (isGrandFinal ? Colors.amber : Colors.green).withOpacity(0.1),
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(11),
-                ),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(11)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1204,8 +1211,7 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (score != null && score.isNotEmpty) ...[
-            const SizedBox(width: 4),
+          if (score != null && score.isNotEmpty && score != '0')
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
@@ -1225,7 +1231,6 @@ Future<String> _getWinnerName(dynamic winner, Map<String, dynamic> match) async 
                 ),
               ),
             ),
-          ],
         ],
       ),
     );

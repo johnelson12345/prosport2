@@ -3122,46 +3122,62 @@ class _CompactMatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final team1 =
-        match['team1'] as Map<String, dynamic>? ?? {'name': 'TBD', 'id': 'tbd'};
-    final team2 =
-        match['team2'] as Map<String, dynamic>? ?? {'name': 'TBD', 'id': 'tbd'};
+    final team1 = match['team1'] as Map<String, dynamic>? ?? {'name': 'TBD', 'id': 'tbd'};
+    final team2 = match['team2'] as Map<String, dynamic>? ?? {'name': 'TBD', 'id': 'tbd'};
 
-    String team1Name = _getDisplayName(team1, match['team1Name']);
-    String team2Name = _getDisplayName(team2, match['team2Name']);
-
-    // Get the actual team IDs - for team2, it might be in team2Id field
-    final String? team1Id = match['team1Id'] ?? team1['id'];
-    final String? team2Id = match['team2Id'] ?? team2['id'];
+    // Get display names - these are the actual names shown in UI
+    String team1DisplayName = _getDisplayName(team1, match['team1Name']);
+    String team2DisplayName = _getDisplayName(team2, match['team2Name']);
+    
+    // For placeholder matches, use the display names to look up scores
+    String team1LookupName = team1DisplayName;
+    String team2LookupName = team2DisplayName;
     
     final scores = match['scores'] as Map<String, dynamic>? ?? {};
     final winner = match['winner'];
     
-    // FIX: Get scores using multiple possible keys
-    String? getTeamScore(String? teamId, String teamName) {
-      if (teamId == null) return null;
-      
-      // Try direct ID match first
-      if (scores.containsKey(teamId)) {
-        return scores[teamId].toString();
+    // FIX: Improved score retrieval for placeholder matches
+    String? getTeamScore(String displayName, String? teamId) {
+      // Try direct match with display name first (for placeholder matches)
+      if (scores.containsKey(displayName)) {
+        return scores[displayName].toString();
       }
       
-      // Try name match
-      if (scores.containsKey(teamName)) {
-        return scores[teamName].toString();
+      // Try with team ID if available and not placeholder
+      if (teamId != null && !teamId.contains('match_') && !teamId.contains('winner') && !teamId.contains('loser')) {
+        if (scores.containsKey(teamId)) {
+          return scores[teamId].toString();
+        }
       }
       
-      // For placeholder teams, the actual winning team ID might be stored
-      // in the winner field or in team2Id
-      if (match['team2Id'] != null && scores.containsKey(match['team2Id'])) {
-        return scores[match['team2Id']].toString();
+      // Try with the team name from the match object
+      if (match['team1Name'] != null && scores.containsKey(match['team1Name'])) {
+        return scores[match['team1Name']].toString();
+      }
+      if (match['team2Name'] != null && scores.containsKey(match['team2Name'])) {
+        return scores[match['team2Name']].toString();
+      }
+      
+      // Check if there are any scores in the map (for debugging)
+      if (scores.isNotEmpty) {
+        // Return the first score if available (fallback)
+        return scores.values.first.toString();
       }
       
       return null;
     }
 
-    String? team1Score = getTeamScore(team1Id, team1Name);
-    String? team2Score = getTeamScore(team2Id, team2Name);
+    // Get scores using display names
+    String? team1Score = getTeamScore(team1DisplayName, team1['id']?.toString());
+    String? team2Score = getTeamScore(team2DisplayName, team2['id']?.toString());
+
+    // Also check direct score fields from the match
+    if (team1Score == null && match['team1Score'] != null) {
+      team1Score = match['team1Score'].toString();
+    }
+    if (team2Score == null && match['team2Score'] != null) {
+      team2Score = match['team2Score'].toString();
+    }
 
     final matchType = match['matchType'] ?? 'regular';
     final bracket = match['bracket'] as String?;
@@ -3169,6 +3185,9 @@ class _CompactMatchCard extends StatelessWidget {
     final nextMatchRef = match['nextMatchReference'];
     final isBye = matchType == 'bye';
     final isFixedMatch = match['isFixedMatch'] == true;
+    final isPlaceholderMatch = match['isPlaceholderMatch'] == true || 
+                               team1['type'] == 'placeholder' ||
+                               team2['type'] == 'placeholder';
 
     String roundName = 'Round $round';
     if (bracket == 'winners') {
@@ -3177,6 +3196,8 @@ class _CompactMatchCard extends StatelessWidget {
       roundName = 'Losers R$round';
     } else if (bracket == 'finals') {
       roundName = match['isIfNecessary'] == true ? 'If Necessary' : 'Final';
+    } else if (bracket == 'grand') {
+      roundName = 'GRAND FINAL';
     } else if (isFixedMatch) {
       roundName = 'FIXED';
     }
@@ -3190,7 +3211,7 @@ class _CompactMatchCard extends StatelessWidget {
       borderColor = Colors.green.shade200;
     } else if (bracket == 'losers') {
       borderColor = Colors.orange.shade200;
-    } else if (bracket == 'finals') {
+    } else if (bracket == 'finals' || bracket == 'grand') {
       borderColor = Colors.purple.shade300;
     }
 
@@ -3201,212 +3222,270 @@ class _CompactMatchCard extends StatelessWidget {
       headerColor = Colors.green.shade50;
     } else if (bracket == 'losers') {
       headerColor = Colors.orange.shade50;
-    } else if (bracket == 'finals') {
+    } else if (bracket == 'finals' || bracket == 'grand') {
       headerColor = Colors.purple.shade50;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: borderColor,
-          width: isFixedMatch ? 2 : 1,
+    // Determine if the match has scores (for display)
+    final hasScores = team1Score != null && team2Score != null && 
+                      team1Score != '-' && team2Score != '-';
+
+    return GestureDetector(
+      onTap: onEdit,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: borderColor,
+            width: isFixedMatch ? 2 : 1,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: headerColor,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(7),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: headerColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(7),
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  margin: const EdgeInsets.only(right: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: borderColor, width: 1),
-                  ),
-                  child: Text(
-                    'M$matchNumber',
-                    style: TextStyle(
-                      fontSize: 7,
-                      fontWeight: FontWeight.bold,
-                      color: isFixedMatch
-                          ? Colors.blue.shade700
-                          : (bracket == 'winners'
-                              ? Colors.green.shade700
-                              : (bracket == 'losers'
-                                  ? Colors.orange.shade700
-                                  : (bracket == 'finals'
-                                      ? Colors.purple.shade700
-                                      : Colors.grey.shade700))),
-                    ),
-                  ),
-                ),
-                Icon(
-                  isFixedMatch
-                      ? Icons.push_pin
-                      : (bracket == 'winners'
-                          ? Icons.emoji_events
-                          : (bracket == 'losers'
-                              ? Icons.restore
-                              : (bracket == 'finals'
-                                  ? Icons.star
-                                  : (isBye ? Icons.skip_next : Icons.sports)))),
-                  size: 10,
-                  color: isFixedMatch
-                      ? Colors.blue.shade700
-                      : (bracket == 'winners'
-                          ? Colors.green.shade700
-                          : (bracket == 'losers'
-                              ? Colors.orange.shade700
-                              : (bracket == 'finals'
-                                  ? Colors.purple.shade700
-                                  : (isBye
-                                      ? Colors.blue.shade700
-                                      : Colors.grey.shade600)))),
-                ),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: Text(
-                    roundName,
-                    style: TextStyle(
-                      fontSize: 7,
-                      fontWeight: FontWeight.w500,
-                      color: isFixedMatch
-                          ? Colors.blue.shade700
-                          : (bracket == 'winners'
-                              ? Colors.green.shade700
-                              : (bracket == 'losers'
-                                  ? Colors.orange.shade700
-                                  : (bracket == 'finals'
-                                      ? Colors.purple.shade700
-                                      : Colors.grey.shade700))),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (isFixedMatch)
+              child: Row(
+                children: [
                   Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                     margin: const EdgeInsets.only(right: 4),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: borderColor, width: 1),
                     ),
-                    child: const Text(
-                      'FIXED',
+                    child: Text(
+                      'M$matchNumber',
                       style: TextStyle(
-                        fontSize: 6,
+                        fontSize: 7,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue,
+                        color: isFixedMatch
+                            ? Colors.blue.shade700
+                            : (bracket == 'winners'
+                                ? Colors.green.shade700
+                                : (bracket == 'losers'
+                                    ? Colors.orange.shade700
+                                    : (bracket == 'finals' || bracket == 'grand'
+                                        ? Colors.purple.shade700
+                                        : Colors.grey.shade700))),
                       ),
                     ),
                   ),
-                if (match['startTime'] != null || match['dateTime'] != null)
+                  Icon(
+                    isFixedMatch
+                        ? Icons.push_pin
+                        : (bracket == 'winners'
+                            ? Icons.emoji_events
+                            : (bracket == 'losers'
+                                ? Icons.restore
+                                : (bracket == 'finals' || bracket == 'grand'
+                                    ? Icons.star
+                                    : (isBye ? Icons.skip_next : Icons.sports)))),
+                    size: 10,
+                    color: isFixedMatch
+                        ? Colors.blue.shade700
+                        : (bracket == 'winners'
+                            ? Colors.green.shade700
+                            : (bracket == 'losers'
+                                ? Colors.orange.shade700
+                                : (bracket == 'finals' || bracket == 'grand'
+                                    ? Colors.purple.shade700
+                                    : (isBye
+                                        ? Colors.blue.shade700
+                                        : Colors.grey.shade600)))),
+                  ),
+                  const SizedBox(width: 2),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          formatDateTime(
-                              match['startTime'] ?? match['dateTime']),
-                          style: TextStyle(
-                            fontSize: 6,
-                            color: Colors.grey.shade600,
-                          ),
-                          textAlign: TextAlign.right,
+                    child: Text(
+                      roundName,
+                      style: TextStyle(
+                        fontSize: 7,
+                        fontWeight: FontWeight.w500,
+                        color: isFixedMatch
+                            ? Colors.blue.shade700
+                            : (bracket == 'winners'
+                                ? Colors.green.shade700
+                                : (bracket == 'losers'
+                                    ? Colors.orange.shade700
+                                    : (bracket == 'finals' || bracket == 'grand'
+                                        ? Colors.purple.shade700
+                                        : Colors.grey.shade700))),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isFixedMatch)
+                    Container(
+                      margin: const EdgeInsets.only(right: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'FIXED',
+                        style: TextStyle(
+                          fontSize: 6,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
                         ),
-                        if (match['endTime'] != null &&
-                            match['endTime'].toString().isNotEmpty)
+                      ),
+                    ),
+                  if (match['startTime'] != null || match['dateTime'] != null)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
                           Text(
-                            formatEndDateTime(match['endTime']),
+                            formatDateTime(match['startTime'] ?? match['dateTime']),
                             style: TextStyle(
                               fontSize: 6,
-                              color: Colors.grey.shade500,
+                              color: Colors.grey.shade600,
                             ),
                             textAlign: TextAlign.right,
                           ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              children: [
-                if (isBye) ...[
-                  _buildTeamRow(
-                    name: team1Name,
-                    score: team1Score,
-                    isWinner: true,
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 2),
-                    child: Text('BYE',
-                        style: TextStyle(fontSize: 7, color: Colors.blue)),
-                  ),
-                ] else ...[
-                  _buildTeamRow(
-                    name: team1Name,
-                    score: team1Score,
-                    isWinner: winner == team1Id || winner == team1Name,
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 2),
-                    child: Text('VS',
-                        style: TextStyle(fontSize: 7, color: Colors.grey)),
-                  ),
-                  _buildTeamRow(
-                    name: team2Name,
-                    score: team2Score,
-                    isWinner: winner == team2Id || winner == team2Name,
-                  ),
-                ],
-                if (nextMatchRef != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '→ Winner to Match $nextMatchRef',
-                      style: TextStyle(
-                        fontSize: 7,
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
+                          if (match['endTime'] != null &&
+                              match['endTime'].toString().isNotEmpty)
+                            Text(
+                              formatEndDateTime(match['endTime']),
+                              style: TextStyle(
+                                fontSize: 6,
+                                color: Colors.grey.shade500,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                        ],
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+
+            Padding(
+              padding: const EdgeInsets.all(6),
+              child: Column(
+                children: [
+                  if (isBye) ...[
+                    _buildTeamRow(
+                      name: team1DisplayName,
+                      score: team1Score,
+                      isWinner: true,
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 2),
+                      child: Text('BYE',
+                          style: TextStyle(fontSize: 7, color: Colors.blue)),
+                    ),
+                  ] else if (isPlaceholderMatch && !hasScores) ...[
+                    _buildTeamRow(
+                      name: team1DisplayName,
+                      score: null,
+                      isWinner: false,
+                      isPlaceholder: true,
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 2),
+                      child: Text('VS',
+                          style: TextStyle(fontSize: 7, color: Colors.grey)),
+                    ),
+                    _buildTeamRow(
+                      name: team2DisplayName,
+                      score: null,
+                      isWinner: false,
+                      isPlaceholder: true,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Tap to enter scores',
+                        style: TextStyle(
+                          fontSize: 6,
+                          color: Colors.blue.shade600,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    _buildTeamRow(
+                      name: team1DisplayName,
+                      score: team1Score,
+                      isWinner: winner == team1DisplayName || 
+                                winner == team1['id'] || 
+                                (winner != null && winner == match['team1Id']),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 2),
+                      child: Text('VS',
+                          style: TextStyle(fontSize: 7, color: Colors.grey)),
+                    ),
+                    _buildTeamRow(
+                      name: team2DisplayName,
+                      score: team2Score,
+                      isWinner: winner == team2DisplayName || 
+                                winner == team2['id'] || 
+                                (winner != null && winner == match['team2Id']),
+                    ),
+                  ],
+                  if (nextMatchRef != null && !isPlaceholderMatch)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '→ Winner to Match $nextMatchRef',
+                        style: TextStyle(
+                          fontSize: 7,
+                          color: Colors.grey.shade600,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   String _getDisplayName(Map<String, dynamic> team, String? teamName) {
+    // Check if the match already has scores - if so, use the actual team names
+    final scores = match['scores'] as Map<String, dynamic>?;
+    
+    // For placeholder matches that have scores, extract the actual team name from scores
+    if (scores != null && scores.isNotEmpty) {
+      // If this team has a score in the scores map, use that key as the name
+      final teamId = team['id']?.toString();
+      final displayName = team['displayName']?.toString();
+      
+      if (displayName != null && scores.containsKey(displayName)) {
+        // If the display name is in scores, it's likely a placeholder name
+        // But we want to show the actual team name if available
+        if (team['type'] == 'placeholder' && team['sourceMatch'] != null) {
+          // This is a placeholder - try to get the actual team name from source match
+          // For now, show the placeholder name but with a note
+          return displayName;
+        }
+        return displayName;
+      }
+    }
+    
     if (teamName != null && teamName.isNotEmpty) {
       if (teamName.contains('Winner Match')) {
         final matchNumber = teamName.replaceAll(RegExp(r'[^0-9]'), '');
-        return 'M$matchNumber';
+        return 'Winner M$matchNumber';
       }
       if (teamName.contains('Loser Match')) {
         final matchNumber = teamName.replaceAll(RegExp(r'[^0-9]'), '');
-        return 'L$matchNumber';
+        return 'Loser M$matchNumber';
       }
       return teamName;
     }
@@ -3415,11 +3494,11 @@ class _CompactMatchCard extends StatelessWidget {
       final name = team['name'] ?? '';
       if (name.contains('Winner Match')) {
         final matchNumber = name.replaceAll(RegExp(r'[^0-9]'), '');
-        return 'M$matchNumber';
+        return 'Winner M$matchNumber';
       }
       if (name.contains('Loser Match')) {
         final matchNumber = name.replaceAll(RegExp(r'[^0-9]'), '');
-        return 'L$matchNumber';
+        return 'Loser M$matchNumber';
       }
       return name;
     }
@@ -3431,6 +3510,7 @@ class _CompactMatchCard extends StatelessWidget {
     required String name,
     String? score,
     required bool isWinner,
+    bool isPlaceholder = false,
   }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3441,32 +3521,35 @@ class _CompactMatchCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 8,
               fontWeight: isWinner ? FontWeight.bold : FontWeight.normal,
-              color: isWinner ? Colors.green.shade700 : Colors.black87,
+              color: isWinner 
+                  ? Colors.green.shade700 
+                  : (isPlaceholder ? Colors.orange.shade700 : Colors.black87),
+              fontStyle: isPlaceholder ? FontStyle.italic : FontStyle.normal,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-          decoration: BoxDecoration(
-            color: isWinner ? Colors.green.shade100 : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(3),
-          ),
-          child: Text(
-            score ?? '-',
-            style: TextStyle(
-              fontSize: 7,
-              fontWeight: FontWeight.bold,
-              color: isWinner ? Colors.green.shade700 : Colors.grey.shade700,
+        if (score != null && score != '-')
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+            decoration: BoxDecoration(
+              color: isWinner ? Colors.green.shade100 : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              score,
+              style: TextStyle(
+                fontSize: 7,
+                fontWeight: FontWeight.bold,
+                color: isWinner ? Colors.green.shade700 : Colors.grey.shade700,
+              ),
             ),
           ),
-        ),
       ],
     );
   }
 }
-
 
 
 class _ActionButton extends StatelessWidget {
