@@ -41,7 +41,7 @@ class _TournamentOfficialBracketDialogState
   // Cache for participant names
   final Map<String, String> _participantNameCache = {};
   
-  // Cache for resolved match results - key: matchNumber, value: {team1, team2, winner, loser}
+  // Cache for match results - key: matchNumber, value: {team1, team2, winner, loser}
   final Map<int, Map<String, String>> _matchResults = {};
 
   // Bracket structure
@@ -115,11 +115,9 @@ class _TournamentOfficialBracketDialogState
   }
 
   Future<void> _loadAllParticipantNames(List<Map<String, dynamic>> schedules) async {
-    // Collect all participant IDs from all matches
     Set<String> participantIds = {};
     
     for (var match in schedules) {
-      // Get from team1 and team2 objects
       if (match['team1'] is Map && match['team1']['id'] != null) {
         String id = match['team1']['id'].toString();
         if (!id.contains('match_') && !id.contains('winner') && !id.contains('loser')) {
@@ -133,7 +131,6 @@ class _TournamentOfficialBracketDialogState
         }
       }
       
-      // Get from team1Id and team2Id fields
       if (match['team1Id'] != null) {
         String id = match['team1Id'].toString();
         if (!id.contains('match_') && !id.contains('winner') && !id.contains('loser')) {
@@ -146,19 +143,8 @@ class _TournamentOfficialBracketDialogState
           participantIds.add(id);
         }
       }
-      
-      // Get from scores map keys (they might be team names or IDs)
-      if (match['scores'] != null) {
-        final scores = match['scores'] as Map<String, dynamic>;
-        for (var key in scores.keys) {
-          if (key.contains('-') || key.length > 10) {
-            participantIds.add(key);
-          }
-        }
-      }
     }
     
-    // Fetch all participant names
     for (var id in participantIds) {
       await _getParticipantName(id);
     }
@@ -180,7 +166,6 @@ class _TournamentOfficialBracketDialogState
       if (doc.exists) {
         Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
         String name = data['name'] ?? data['teamName'] ?? 'Unknown';
-        // Remove "Seed X" suffix
         name = name.replaceAll(RegExp(r'\s*\(Seed \d+\)\s*'), '');
         _participantNameCache[participantId] = name;
         return name;
@@ -190,21 +175,39 @@ class _TournamentOfficialBracketDialogState
     return participantId;
   }
 
-  // Get actual team name - this is the main resolver
-  Future<String> _getActualTeamName(dynamic team, Map<String, dynamic> contextMatch) async {
+  // Resolve any team reference to its actual name
+  Future<String> _resolveTeamName(dynamic team) async {
     if (team == null) return 'TBD';
     
     // If it's a map
     if (team is Map<String, dynamic>) {
       // Check if it's a placeholder
       if (team['isPlaceholder'] == true || team['type'] == 'placeholder') {
-        return await _resolvePlaceholderFromMap(team);
+        int? sourceMatchNum;
+        bool needWinner = true;
+        
+        if (team['sourceMatch'] != null) {
+          sourceMatchNum = team['sourceMatch'] is int 
+              ? team['sourceMatch'] 
+              : int.tryParse(team['sourceMatch'].toString());
+        }
+        
+        needWinner = team['name']?.toString().contains('Winner') ?? 
+                     team['displayName']?.toString().contains('Winner') ?? true;
+        
+        if (sourceMatchNum != null && _matchResults.containsKey(sourceMatchNum)) {
+          return needWinner 
+              ? _matchResults[sourceMatchNum]!['winner'] ?? 'TBD'
+              : _matchResults[sourceMatchNum]!['loser'] ?? 'TBD';
+        }
+        
+        return team['displayName'] ?? team['name'] ?? 'TBD';
       }
       
       // If it has an ID
       if (team.containsKey('id') && team['id'] != null) {
         String id = team['id'].toString();
-        return await _resolveById(id, contextMatch);
+        return await _resolveTeamById(id);
       }
       
       // Direct name
@@ -218,40 +221,14 @@ class _TournamentOfficialBracketDialogState
     
     // If it's a string
     if (team is String) {
-      return await _resolveByString(team, contextMatch);
+      return await _resolveTeamById(team);
     }
     
     return 'TBD';
   }
 
-  Future<String> _resolvePlaceholderFromMap(Map<String, dynamic> placeholder) async {
-    int? sourceMatchNum;
-    bool needWinner = true;
-    
-    // Get source match number
-    if (placeholder['sourceMatch'] != null) {
-      sourceMatchNum = placeholder['sourceMatch'] is int 
-          ? placeholder['sourceMatch'] 
-          : int.tryParse(placeholder['sourceMatch'].toString());
-    }
-    
-    // Determine if we need winner or loser
-    needWinner = placeholder['name']?.toString().contains('Winner') ?? 
-                 placeholder['displayName']?.toString().contains('Winner') ?? 
-                 placeholder['type'] == 'winner' ?? true;
-    
-    if (sourceMatchNum != null && _matchResults.containsKey(sourceMatchNum)) {
-      if (needWinner) {
-        return _matchResults[sourceMatchNum]!['winner'] ?? 'TBD';
-      } else {
-        return _matchResults[sourceMatchNum]!['loser'] ?? 'TBD';
-      }
-    }
-    
-    return placeholder['displayName'] ?? placeholder['name'] ?? 'TBD';
-  }
-
-  Future<String> _resolveById(String id, Map<String, dynamic> contextMatch) async {
+  // Resolve team by ID (handles placeholder IDs like match_1_winner)
+  Future<String> _resolveTeamById(String id) async {
     // Check if it's a placeholder ID like match_1_winner
     final regex = RegExp(r'match_(\d+)_(winner|loser)');
     final match = regex.firstMatch(id);
@@ -260,44 +237,36 @@ class _TournamentOfficialBracketDialogState
       bool needWinner = match.group(2) == 'winner';
       if (_matchResults.containsKey(sourceMatchNum)) {
         return needWinner 
-            ? _matchResults[sourceMatchNum]!['winner'] ?? 'TBD'
-            : _matchResults[sourceMatchNum]!['loser'] ?? 'TBD';
+            ? _matchResults[sourceMatchNum]!['winner'] ?? id
+            : _matchResults[sourceMatchNum]!['loser'] ?? id;
       }
+      return id;
+    }
+    
+    // Check if it's a placeholder string like "Winner Match 1"
+    final winnerRegex = RegExp(r'Winner Match (\d+)', caseSensitive: false);
+    final loserRegex = RegExp(r'Loser Match (\d+)', caseSensitive: false);
+    
+    var stringMatch = winnerRegex.firstMatch(id);
+    if (stringMatch != null) {
+      int sourceMatchNum = int.parse(stringMatch.group(1)!);
+      if (_matchResults.containsKey(sourceMatchNum)) {
+        return _matchResults[sourceMatchNum]!['winner'] ?? id;
+      }
+      return id;
+    }
+    
+    stringMatch = loserRegex.firstMatch(id);
+    if (stringMatch != null) {
+      int sourceMatchNum = int.parse(stringMatch.group(1)!);
+      if (_matchResults.containsKey(sourceMatchNum)) {
+        return _matchResults[sourceMatchNum]!['loser'] ?? id;
+      }
+      return id;
     }
     
     // Real participant ID
     return await _getParticipantName(id);
-  }
-
-  Future<String> _resolveByString(String teamStr, Map<String, dynamic> contextMatch) async {
-    // Check for placeholder patterns
-    final winnerRegex = RegExp(r'Winner Match (\d+)', caseSensitive: false);
-    final loserRegex = RegExp(r'Loser Match (\d+)', caseSensitive: false);
-    
-    var match = winnerRegex.firstMatch(teamStr);
-    if (match != null) {
-      int sourceMatchNum = int.parse(match.group(1)!);
-      if (_matchResults.containsKey(sourceMatchNum)) {
-        return _matchResults[sourceMatchNum]!['winner'] ?? teamStr;
-      }
-      return teamStr;
-    }
-    
-    match = loserRegex.firstMatch(teamStr);
-    if (match != null) {
-      int sourceMatchNum = int.parse(match.group(1)!);
-      if (_matchResults.containsKey(sourceMatchNum)) {
-        return _matchResults[sourceMatchNum]!['loser'] ?? teamStr;
-      }
-      return teamStr;
-    }
-    
-    // Check if it's a participant ID
-    if (teamStr.length > 10 || teamStr.contains('-')) {
-      return await _getParticipantName(teamStr);
-    }
-    
-    return _cleanTeamName(teamStr);
   }
 
   // Process a match and store its results in cache
@@ -308,7 +277,7 @@ class _TournamentOfficialBracketDialogState
     
     // Get team1 name
     if (match['team1'] != null) {
-      results['team1'] = await _getActualTeamName(match['team1'], match);
+      results['team1'] = await _resolveTeamName(match['team1']);
     } else if (match['team1Name'] != null) {
       results['team1'] = _cleanTeamName(match['team1Name'].toString());
     } else {
@@ -317,7 +286,7 @@ class _TournamentOfficialBracketDialogState
     
     // Get team2 name
     if (match['team2'] != null) {
-      results['team2'] = await _getActualTeamName(match['team2'], match);
+      results['team2'] = await _resolveTeamName(match['team2']);
     } else if (match['team2Name'] != null) {
       results['team2'] = _cleanTeamName(match['team2Name'].toString());
     } else {
@@ -327,12 +296,12 @@ class _TournamentOfficialBracketDialogState
     // Determine winner
     String winnerName = 'TBD';
     
-    // Try winner field first
+    // Try to get winner from winner field
     if (match['winner'] != null) {
-      winnerName = await _getActualTeamName(match['winner'], match);
+      winnerName = await _resolveTeamName(match['winner']);
     }
     
-    // If winner is still placeholder or TBD, try from scores
+    // If winner is still a placeholder, try from scores
     if (winnerName == 'TBD' || winnerName.contains('Winner') || winnerName.contains('Loser')) {
       final scores = match['scores'] as Map<String, dynamic>?;
       if (scores != null && scores.isNotEmpty) {
@@ -346,17 +315,8 @@ class _TournamentOfficialBracketDialogState
           }
         }
         if (winnerKey != null) {
-          winnerName = await _getActualTeamName(winnerKey, match);
+          winnerName = await _resolveTeamName(winnerKey);
         }
-      }
-    }
-    
-    // If winner is still a placeholder, try to resolve from team names
-    if (winnerName.contains('Winner') || winnerName.contains('Loser')) {
-      if (results['team1'] != null && !results['team1']!.contains('Winner') && !results['team1']!.contains('Loser')) {
-        winnerName = results['team1']!;
-      } else if (results['team2'] != null && !results['team2']!.contains('Winner') && !results['team2']!.contains('Loser')) {
-        winnerName = results['team2']!;
       }
     }
     
@@ -365,7 +325,7 @@ class _TournamentOfficialBracketDialogState
     // Determine loser
     String loserName = 'TBD';
     if (match['loser'] != null) {
-      loserName = await _getActualTeamName(match['loser'], match);
+      loserName = await _resolveTeamName(match['loser']);
     }
     
     if (loserName == 'TBD' || loserName.contains('Winner') || loserName.contains('Loser')) {
@@ -388,7 +348,7 @@ class _TournamentOfficialBracketDialogState
             }
           }
           if (loserKey != null) {
-            loserName = await _getActualTeamName(loserKey, match);
+            loserName = await _resolveTeamName(loserKey);
           }
         }
       }
@@ -397,6 +357,9 @@ class _TournamentOfficialBracketDialogState
     results['loser'] = loserName;
     
     _matchResults[matchNum] = results;
+    
+    // Debug output
+    print('Match $matchNum: team1=${results['team1']}, team2=${results['team2']}, winner=${results['winner']}, loser=${results['loser']}');
   }
 
   String _cleanTeamName(String name) {
@@ -887,50 +850,17 @@ class _TournamentOfficialBracketDialogState
     String team2Name = 'TBD';
     String winnerName = 'TBD';
     
-    // Use cached results if available
     if (_matchResults.containsKey(matchNum)) {
       team1Name = _matchResults[matchNum]!['team1'] ?? 'TBD';
       team2Name = _matchResults[matchNum]!['team2'] ?? 'TBD';
       winnerName = _matchResults[matchNum]!['winner'] ?? 'TBD';
-    } else {
-      // Process the match now
-      await _processMatch(match);
-      if (_matchResults.containsKey(matchNum)) {
-        team1Name = _matchResults[matchNum]!['team1'] ?? 'TBD';
-        team2Name = _matchResults[matchNum]!['team2'] ?? 'TBD';
-        winnerName = _matchResults[matchNum]!['winner'] ?? 'TBD';
-      }
     }
-    
-    // Final cleanup - ensure no placeholder text remains
-    team1Name = _finalCleanName(team1Name);
-    team2Name = _finalCleanName(team2Name);
-    winnerName = _finalCleanName(winnerName);
     
     return {
       'team1': team1Name,
       'team2': team2Name,
       'winner': winnerName,
     };
-  }
-
-  String _finalCleanName(String name) {
-    if (name.contains('Winner Match') || name.contains('Loser Match')) {
-      // Try to extract the match number and resolve again
-      final regex = RegExp(r'(Winner|Loser) Match (\d+)');
-      final match = regex.firstMatch(name);
-      if (match != null) {
-        int sourceMatchNum = int.parse(match.group(2)!);
-        if (_matchResults.containsKey(sourceMatchNum)) {
-          if (match.group(1) == 'Winner') {
-            return _matchResults[sourceMatchNum]!['winner'] ?? name;
-          } else {
-            return _matchResults[sourceMatchNum]!['loser'] ?? name;
-          }
-        }
-      }
-    }
-    return name;
   }
 
   Widget _buildBracketMatchCard({
@@ -950,8 +880,7 @@ class _TournamentOfficialBracketDialogState
     String? team2Score = _getTeamScore(match['team2'], match);
 
     final hasWinner = winnerName != 'TBD' && winnerName.isNotEmpty && 
-                      !winnerName.contains('Winner') && !winnerName.contains('Loser') &&
-                      winnerName != 'TBD';
+                      !winnerName.contains('Winner') && !winnerName.contains('Loser');
 
     Color bracketColor = Colors.blue;
     if (bracket == 'winners') {

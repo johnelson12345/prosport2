@@ -1,51 +1,20 @@
-# Tabulation System v7 - Score Saving Fix IMPLEMENTATION TRACKER
+# Bracket.dart Team Resolution Fix TODO
 
-## Status
-✅ Planning complete  
-⏳ Creating detailed TODO.md  
-⏳ [Step 1] Read full score_encoding.dart  
-⏳ [Step 2] Implement _saveScore() fixes  
-⏳ [Step 3] Add UI feedback & indicators  
-⏳ [Step 4] Audit logging  
-⏳ [Step 5] Testing & validation  
-✅ Update original TODO.md  
+## Task: Fix bracket.dart to display actual teams instead of "Winner Match X" when source matches have scores
 
-## Detailed Steps
+### Steps:
+1. [x] **Analyze current bug**: Enhanced _getMatchDisplayNames to directly resolve using _getActualTeamName + debug logs + improved _getTeamScore.
+2. [ ] **Improve regex patterns**: Add patterns for all placeholder formats in _getActualTeamName (_WINNER_MATCH_REGEX, _LOSER_MATCH_REGEX, ID_REGEX).
+3. [x] **Fix score resolution**: Prioritize team1Score/team2Score, then team IDs for scores lookup.
+4. [x] **Add debug logging**: Added print statements in _getMatchDisplayNames and _resolvePlaceholder.
+5. [ ] **Test with JSON data**: Verify Match 3 shows 'UNIT 4' vs 'UNIT 3'.
+6. [ ] **Edge cases**: Handle incomplete source matches (show placeholder), no sourceMatch (extract from name).
+7. [ ] **Clean up**: Remove debug logs after confirmation.
+8. [ ] **Complete**: attempt_completion
 
-### Step 1: Analyze Current Code [score_encoding.dart]
-- [ ] Read full file contents
-- [ ] Identify _saveScore() current state
-- [ ] Map parent match relationships
-- [ ] Note existing UI elements (score inputs, save button)
+**Current Progress: 3/8**
+**Priority: High**
 
-### Step 2: Fix _saveScore() Method
-- [ ] Add `_isReady()` helper
-- [ ] Add placeholder validation
-- [ ] Implement auto-resolution from parents
-- [ ] Add timestamps & current user
-- [ ] Prevent duplicate saves
-- [ ] Use teamIds as score keys
-- [ ] Test Firestore update
-
-### Step 3: UI Improvements
-- [ ] Parent status display
-- [ ] Readiness color indicators
-- [ ] Enhanced error/success messages
-
-### Step 4: Audit Logging
-- [ ] editHistory array structure
-- [ ] Capture before/after scores
-- [ ] Console debugging
-
-### Step 5: Testing
-- [ ] 4-team tournament setup
-- [ ] Round 1 → Round 2 unlock
-- [ ] Error handling validation
-- [ ] flutter analyze & pub get
-
-## Commands Ready
-```
-flutter pub get
-flutter analyze
-```
+Next: Test the changes - run the app, open bracket dialog for tournament_double4, check console logs and if Match 3 shows actual teams.
+`flutter run` or hot reload, then test.
 
