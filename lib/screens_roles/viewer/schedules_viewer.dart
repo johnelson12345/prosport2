@@ -7,11 +7,11 @@ import 'package:async/async.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:tabulation_systemv7/services/tournament_calendar_printing.dart';
 
-class TournamentCalendarScreen extends StatefulWidget {
+class SchedulesViewer extends StatefulWidget {
   final String? tournamentId;
   final bool isEditable;
 
-  const TournamentCalendarScreen({
+  const SchedulesViewer({
     super.key,
     this.tournamentId,
     this.isEditable = true,
@@ -22,7 +22,7 @@ class TournamentCalendarScreen extends StatefulWidget {
       _TournamentCalendarScreenState();
 }
 
-class _TournamentCalendarScreenState extends State<TournamentCalendarScreen>
+class _TournamentCalendarScreenState extends State<SchedulesViewer>
     with SingleTickerProviderStateMixin {
   final TeamScheduleService _service = TeamScheduleService();
   final SportsService _sportsService = SportsService();
@@ -2877,160 +2877,160 @@ ${tournamentName.isNotEmpty ? '🎯 Tournament: $tournamentName' : ''}
       backgroundColor: Colors.grey[50],
       body: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left, size: 20),
-                      onPressed: () => _navigateDate(-1),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.grey[100],
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(2),
-                      constraints: const BoxConstraints(),
-                    ),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () => _selectDate(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 4,
-                          horizontal: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          _displayDateFormat.format(_selectedDate),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right, size: 20),
-                      onPressed: () => _navigateDate(1),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.grey[100],
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(2),
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                _buildViewToggle(),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: _buildFilterSection(_availableSports),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Tooltip(
-                    message: 'Create Announcement',
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _showCreateAnnouncementDialog,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.campaign,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'Announce',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.add,
-                                  color: Colors.white,
-                                  size: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.list_alt, color: Color.fromARGB(255, 5, 33, 57)),
-                  onPressed: () => _showManageAnnouncementsBottomSheet(context),
-                  tooltip: 'Manage Announcements',
-                ),
-                if (_isPrinting)
-                  const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
-                      ),
-                    ),
-                  )
-                else
-                  IconButton(
-                    icon: const Icon(Icons.picture_as_pdf, color: Colors.grey),
-                    onPressed: _printCalendar,
-                    tooltip: 'Export as PDF',
-                  ),
-              ],
-            ),
-          ),
+          // Container(
+          //   padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          //   decoration: BoxDecoration(
+          //     color: Colors.white,
+          //     boxShadow: [
+          //       BoxShadow(
+          //         color: Colors.grey.withOpacity(0.1),
+          //         blurRadius: 10,
+          //         offset: const Offset(0, 2),
+          //       ),
+          //     ],
+          //   ),
+          //   child: Row(
+          //     children: [
+          //       Row(
+          //         children: [
+          //           IconButton(
+          //             icon: const Icon(Icons.chevron_left, size: 20),
+          //             onPressed: () => _navigateDate(-1),
+          //             style: IconButton.styleFrom(
+          //               backgroundColor: Colors.grey[100],
+          //               shape: RoundedRectangleBorder(
+          //                 borderRadius: BorderRadius.circular(6),
+          //               ),
+          //             ),
+          //             padding: const EdgeInsets.all(2),
+          //             constraints: const BoxConstraints(),
+          //           ),
+          //           const SizedBox(width: 4),
+          //           GestureDetector(
+          //             onTap: () => _selectDate(context),
+          //             child: Container(
+          //               padding: const EdgeInsets.symmetric(
+          //                 vertical: 4,
+          //                 horizontal: 8,
+          //               ),
+          //               decoration: BoxDecoration(
+          //                 color: Colors.white,
+          //                 borderRadius: BorderRadius.circular(6),
+          //               ),
+          //               child: Text(
+          //                 _displayDateFormat.format(_selectedDate),
+          //                 style: const TextStyle(
+          //                   fontSize: 12,
+          //                   fontWeight: FontWeight.w600,
+          //                   color: Colors.black87,
+          //                 ),
+          //               ),
+          //             ),
+          //           ),
+          //           const SizedBox(width: 4),
+          //           IconButton(
+          //             icon: const Icon(Icons.chevron_right, size: 20),
+          //             onPressed: () => _navigateDate(1),
+          //             style: IconButton.styleFrom(
+          //               backgroundColor: Colors.grey[100],
+          //               shape: RoundedRectangleBorder(
+          //                 borderRadius: BorderRadius.circular(6),
+          //               ),
+          //             ),
+          //             padding: const EdgeInsets.all(2),
+          //             constraints: const BoxConstraints(),
+          //           ),
+          //         ],
+          //       ),
+          //       const SizedBox(width: 12),
+          //       _buildViewToggle(),
+          //       const SizedBox(width: 12),
+          //       Expanded(
+          //         flex: 2,
+          //         child: _buildFilterSection(_availableSports),
+          //       ),
+          //       const SizedBox(width: 12),
+          //       Container(
+          //         decoration: BoxDecoration(
+          //           color: Colors.blue,
+          //           borderRadius: BorderRadius.circular(8),
+          //         ),
+          //         child: Tooltip(
+          //           message: 'Create Announcement',
+          //           child: Material(
+          //             color: Colors.transparent,
+          //             child: InkWell(
+          //               onTap: _showCreateAnnouncementDialog,
+          //               borderRadius: BorderRadius.circular(8),
+          //               child: Padding(
+          //                 padding: const EdgeInsets.symmetric(
+          //                   horizontal: 12,
+          //                   vertical: 8,
+          //                 ),
+          //                 child: Row(
+          //                   mainAxisSize: MainAxisSize.min,
+          //                   children: [
+          //                     const Icon(
+          //                       Icons.campaign,
+          //                       color: Colors.white,
+          //                       size: 18,
+          //                     ),
+          //                     const SizedBox(width: 4),
+          //                     const Text(
+          //                       'Announce',
+          //                       style: TextStyle(
+          //                         color: Colors.white,
+          //                         fontWeight: FontWeight.w600,
+          //                         fontSize: 13,
+          //                       ),
+          //                     ),
+          //                     const SizedBox(width: 4),
+          //                     Container(
+          //                       padding: const EdgeInsets.all(2),
+          //                       decoration: BoxDecoration(
+          //                         color: Colors.white.withOpacity(0.2),
+          //                         shape: BoxShape.circle,
+          //                       ),
+          //                       child: const Icon(
+          //                         Icons.add,
+          //                         color: Colors.white,
+          //                         size: 12,
+          //                       ),
+          //                     ),
+          //                   ],
+          //                 ),
+          //               ),
+          //             ),
+          //           ),
+          //         ),
+          //       ),
+          //       const SizedBox(width: 8),
+          //       IconButton(
+          //         icon: const Icon(Icons.list_alt, color: Color.fromARGB(255, 5, 33, 57)),
+          //         onPressed: () => _showManageAnnouncementsBottomSheet(context),
+          //         tooltip: 'Manage Announcements',
+          //       ),
+          //       if (_isPrinting)
+          //         const Padding(
+          //           padding: EdgeInsets.all(8.0),
+          //           child: SizedBox(
+          //             width: 20,
+          //             height: 20,
+          //             child: CircularProgressIndicator(
+          //               strokeWidth: 2,
+          //               valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+          //             ),
+          //           ),
+          //         )
+          //       else
+          //         IconButton(
+          //           icon: const Icon(Icons.picture_as_pdf, color: Colors.grey),
+          //           onPressed: _printCalendar,
+          //           tooltip: 'Export as PDF',
+          //         ),
+          //     ],
+          //   ),
+          // ),
           Expanded(
             child: StreamBuilder<List<dynamic>>(
               stream: StreamZip([

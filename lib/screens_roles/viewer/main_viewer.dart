@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_matrix_view.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/announcements.dart';
+import 'package:tabulation_systemv7/screens_roles/viewer/schedules_viewer.dart';
 import 'package:tabulation_systemv7/services/auth.dart';
 import 'package:tabulation_systemv7/services/sports_event_service.dart';
 import 'package:tabulation_systemv7/authentication/login.dart';
@@ -177,7 +178,7 @@ class _ViewerMainState extends State<ViewerMain>
       case 'Announcements':
         return const AnnouncementsScreen();
       case 'Schedules':
-        return const TournamentCalendarScreen();
+        return const SchedulesViewer();
       
          
      
