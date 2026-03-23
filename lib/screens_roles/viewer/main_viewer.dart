@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_matrix_view.dart';
+import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/results_mngmt.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/announcements.dart';
+import 'package:tabulation_systemv7/screens_roles/viewer/results_ranking.dart';
 import 'package:tabulation_systemv7/screens_roles/viewer/schedules_viewer.dart';
 import 'package:tabulation_systemv7/services/auth.dart';
 import 'package:tabulation_systemv7/services/sports_event_service.dart';
@@ -179,7 +181,8 @@ class _ViewerMainState extends State<ViewerMain>
         return const AnnouncementsScreen();
       case 'Schedules':
         return const SchedulesViewer();
-      
+      case 'Results and Rankings':
+        return const ResultsAndRankingsPage();
          
      
       default:
@@ -298,6 +301,9 @@ class _ViewerMainState extends State<ViewerMain>
                     case 'Schedules':
                       iconData = Icons.event;
                       break;
+                    case 'Results and Rankings':
+                      iconData = Icons.emoji_events;
+                      break;
                     default:
                       iconData = Icons.circle;
                   }
@@ -404,7 +410,7 @@ class _ViewerMainState extends State<ViewerMain>
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Text(
-                            'Tabulator',
+                            'Viewer',
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
@@ -591,6 +597,9 @@ class _ViewerMainState extends State<ViewerMain>
                     case 'Schedules':
                       iconData = Icons.event;
                       break;
+                    case 'Results and Rankings':
+                      iconData = Icons.emoji_events;
+                      break;
                    
                     default:
                       iconData = Icons.circle;
@@ -706,7 +715,7 @@ class _ViewerMainState extends State<ViewerMain>
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Text(
-                              'Tabulator',
+                              'Viewer',
                               style: TextStyle(
                                 fontSize: 8,
                                 fontWeight: FontWeight.bold,
@@ -790,7 +799,7 @@ class _ViewerMainState extends State<ViewerMain>
                       children: [
                         Flexible(
                           child: Text(
-                            "Tabulator - $_selectedScreen",
+                            "Viewer - $_selectedScreen",
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,

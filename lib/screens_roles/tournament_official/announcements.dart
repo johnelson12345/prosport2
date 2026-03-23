@@ -214,7 +214,6 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> with Automati
           ),
         ),
       ),
-      floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
@@ -1178,17 +1177,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> with Automati
     );
   }
 
-  Widget _buildFloatingActionButton() {
-    if (_isMobile) {
-      return FloatingActionButton(
-        onPressed: _showCreateOptions,
-        backgroundColor: buttonColor,
-        child: const Icon(Icons.add, color: Colors.white),
-      );
-    }
-    return const SizedBox.shrink();
-  }
-
+ 
   void _showCreateOptions() {
     showModalBottomSheet(
       context: context,
