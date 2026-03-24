@@ -375,7 +375,6 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
 
   Future<void> _fetchVenuesForSport(String sport) async {
     try {
-      print('🔍 Fetching venues for sport: $sport');
 
       final sportSnapshot = await FirebaseFirestore.instance
           .collection('sports')
@@ -383,7 +382,6 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
           .get();
 
       if (sportSnapshot.docs.isEmpty) {
-        print('⚠️ No sport found with name: $sport');
         setState(() {
           _availableVenues = [];
         });
@@ -391,26 +389,20 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
       }
 
       final sportId = sportSnapshot.docs.first.id;
-      print('✅ Found sport ID: $sportId for sport: $sport');
 
       final venueSnapshot = await FirebaseFirestore.instance
           .collection('venues')
           .where('sportId', isEqualTo: sportId)
           .get();
 
-      print(
-          '📋 Found ${venueSnapshot.docs.length} venues for sport ID $sportId');
 
-      // Print each venue for debugging
       for (var doc in venueSnapshot.docs) {
-        print('  - Venue: ${doc['name']} (ID: ${doc.id})');
       }
 
       setState(() {
         _availableVenues = venueSnapshot.docs;
       });
     } catch (e) {
-      print('❌ Error fetching venues: $e');
       setState(() {
         _availableVenues = [];
       });
@@ -809,10 +801,7 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
 
     _linkMatchReferences();
 
-    print('Generated ${_matchups.length} matches for $teamCount teams');
     for (var match in _matchups) {
-      print(
-          'Match ${match['matchNumber']} (Round ${match['round']}): ${match['team1Name']} vs ${match['team2Name']}');
     }
   }
 
@@ -1572,9 +1561,6 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
 
   Future<void> _assignSchedules() async {
     try {
-      print('📝 ASSIGN SCHEDULES STARTED');
-      print('  Matchups: ${_matchups.length}');
-      print('  Selected Schedules: ${_selectedScheduleIds.length}');
 
       int schedulesNeeded = _matchups.length;
 
@@ -1617,10 +1603,6 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
         tournamentData['createdAt'] = DateTime.now();
       }
 
-      print('📊 Tournament Data prepared for Firestore:');
-      print('  ID: ${tournamentData['id']}');
-      print('  Name: ${tournamentData['name']}');
-      print('  Sport: ${tournamentData['sport']}');
 
       // Sort schedules by date/time
       List<String> sortedScheduleIds = List.from(_selectedScheduleIds);
@@ -1651,7 +1633,6 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
       for (int i = 0; i < _matchups.length; i++) {
         // Make sure we don't go out of bounds
         if (i >= sortedScheduleIds.length) {
-          print('ERROR: Not enough schedules for match ${i + 1}');
           break;
         }
 
@@ -1794,32 +1775,23 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
       tournamentData['matchups'] = batchSchedules;
 
       // Save tournament to Firestore
-      print('💾 Saving tournament to Firestore...');
 
       if (isEditing) {
         await _tournamentService.updateTournament(
             _tournamentSetupId, tournamentData);
-        print('✅ Tournament updated successfully');
       } else {
         tournamentData['createdAt'] = DateTime.now();
         await _tournamentService.addTournament(tournamentData);
-        print('✅ Tournament created successfully');
       }
 
       // Save match schedules
-      print('💾 Saving match schedules...');
       await _teamScheduleService.createMultipleTeamSchedules(batchSchedules);
-      print('✅ Match schedules saved successfully');
 
       // Update schedule occupied status
-      print('💾 Updating schedule occupied status...');
       await _matchScheduleService.updateMultipleSchedulesOccupiedStatus(
           _selectedScheduleIds, true);
-      print('✅ Schedule status updated successfully');
 
-      print('🎉 Tournament setup complete!');
     } catch (e) {
-      print('❌ Error in _assignSchedules: $e');
       rethrow; // Rethrow so the calling method can handle it
     }
   }
@@ -2119,10 +2091,6 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
       int schedulesNeeded = _matchups.isNotEmpty
           ? _matchups.length
           : _getRequiredSchedulesCount();
-      print('🔍 STEP 7 - Select Schedules:');
-      print('  Teams: ${_selectedTeamIds.length}');
-      print('  Required Schedules: $schedulesNeeded');
-      print('  Selected Schedules: ${_selectedScheduleIds.length}');
       if (_selectedScheduleIds.length < schedulesNeeded) {
         showValidationSnackBar(
             'Please select at least $schedulesNeeded schedule${schedulesNeeded == 1 ? '' : 's'}');
@@ -2138,9 +2106,6 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
         _saveState();
       });
     } else if (_currentStep == 9) {
-      print('=' * 50);
-      print('STEP 9 - GENERATE MATCHUPS & COMPLETE');
-      print('=' * 50);
 
       // Show loading dialog
       showDialog(
@@ -2156,25 +2121,20 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
       try {
         _generateMatchups();
 
-        print('Matchups generated: ${_matchups.length}');
 
         if (_matchups.isEmpty) {
           // Close loading dialog
           Navigator.of(context).pop();
-          print('❌ ERROR: No matchups generated!');
           showValidationSnackBar(
               'Failed to generate matchups. Please check your team selection.');
           return;
         }
 
-        print('Calling _assignSchedules()...');
         await _assignSchedules();
 
         // Close loading dialog
         Navigator.of(context).pop();
 
-        print('✓ Tournament created successfully!');
-        print('=' * 50);
 
         // Reset the form but DON'T increment _currentStep
         setState(() {
@@ -2210,7 +2170,6 @@ class _TournamentSetupScreenState extends State<TournamentSetupScreen> {
       } catch (e) {
         // Close loading dialog if error occurs
         Navigator.of(context).pop();
-        print('❌ ERROR: $e');
         showValidationSnackBar('Error creating tournament: $e');
       }
     }
