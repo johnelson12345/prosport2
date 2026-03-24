@@ -42,9 +42,31 @@ class _MatchDetailPopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get screen size to ensure popup stays within bounds
+    final screenSize = MediaQuery.of(context).size;
+    const popupWidth = 320.0;
+    const popupHeight = 380.0; // Approximate height of the popup
+    
+    // Calculate centered position
+    double left = position.dx - (popupWidth / 2);
+    double top = position.dy - (popupHeight / 2);
+    
+    // Adjust if popup would go off screen
+    if (left < 10) {
+      left = 10;
+    } else if (left + popupWidth > screenSize.width - 10) {
+      left = screenSize.width - popupWidth - 10;
+    }
+    
+    if (top < 10) {
+      top = 10;
+    } else if (top + popupHeight > screenSize.height - 10) {
+      top = screenSize.height - popupHeight - 10;
+    }
+    
     return Positioned(
-      left: position.dx - 150,
-      top: position.dy - 280,
+      left: left,
+      top: top,
       child: Material(
         color: Colors.transparent,
         child: GestureDetector(
@@ -59,7 +81,7 @@ class _MatchDetailPopup extends StatelessWidget {
                 child: Opacity(
                   opacity: value,
                   child: Container(
-                    width: 320,
+                    width: popupWidth,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
@@ -178,30 +200,30 @@ class _MatchDetailPopup extends StatelessWidget {
                                 // Edit Button
                                 SizedBox(
                                   width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    onPressed: () {
-                                      onClose();
-                                      onEdit();
-                                    },
-                                    icon: const Icon(Icons.edit, size: 18),
-                                    label: const Text(
-                                      'Reschedule Match',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: sportColor,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  ),
+                                  // child: ElevatedButton.icon(
+                                  //   onPressed: () {
+                                  //     onClose();
+                                  //     onEdit();
+                                  //   },
+                                  //   // icon: const Icon(Icons.edit, size: 18),
+                                  //   // label: const Text(
+                                  //   //   'Reschedule Match',
+                                  //   //   style: TextStyle(
+                                  //   //     fontSize: 14,
+                                  //   //     fontWeight: FontWeight.w600,
+                                  //   //   ),
+                                  //   // ),
+                                  //   style: ElevatedButton.styleFrom(
+                                  //     backgroundColor: Colors.white,
+                                  //     foregroundColor: sportColor,
+                                  //     padding: const EdgeInsets.symmetric(
+                                  //       vertical: 12,
+                                  //     ),
+                                  //     shape: RoundedRectangleBorder(
+                                  //       borderRadius: BorderRadius.circular(12),
+                                  //     ),
+                                  //   ),
+                                  // ),
                                 ),
                               ],
                             ),
@@ -664,7 +686,7 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
     return metadata;
   }
 
-Widget _buildOptimizedGridEventCard(
+ Widget _buildOptimizedGridEventCard(
   Map<String, dynamic> event,
   Color sportColor,
   List<Map<String, dynamic>> allSchedules,
@@ -679,6 +701,8 @@ Widget _buildOptimizedGridEventCard(
   final tournamentName = event['tournamentName'] as String? ?? 'Tournament';
   final categoryName = event['categoryName'] as String? ?? 'Category';
   final gender = event['gender'] as String? ?? '';
+  final durationText = metadata['durationText'];
+  final sportName = event['sportName'] as String? ?? event['sport'] as String? ?? 'Sport';
   final timeDisplay = startTime != null && endTime != null
       ? '${_formatTime(startTime)} - ${_formatTime(endTime)}'
       : 'Time TBD';
@@ -762,21 +786,20 @@ Widget _buildOptimizedGridEventCard(
                 : null,
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              height: 95,
+              constraints: const BoxConstraints(minHeight: 85, maxHeight: 95),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    sportColor,
-                    sportColor.withOpacity(0.85),
-                    sportColor.withOpacity(0.7),
+                    sportColor.withOpacity(0.05),
+                    Colors.white,
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1,
+                  color: sportColor.withOpacity(0.3),
+                  width: 1.5,
                 ),
               ),
               child: ClipRRect(
@@ -787,84 +810,148 @@ Widget _buildOptimizedGridEventCard(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Tournament name badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.25),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          tournamentName,
-                          style: const TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      // Match text
-                      Text(
-                        matchText,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.2,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      // Time and round info
+                      // Header with tournament name and edit button
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          if (startTime != null && endTime != null)
-                            _buildOptimizedInfoChip(
-                              Icons.access_time,
-                              _formatTime(startTime),
-                              Colors.white,
+                          Container(
+                            width: 4,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: sportColor,
+                              borderRadius: BorderRadius.circular(2),
                             ),
-                          _buildOptimizedInfoChip(
-                            round != null && round > 1 ? Icons.flag : Icons.sports,
-                            round != null && round > 1 ? 'R$round' : 'M$matchNumber',
-                            Colors.white,
                           ),
-                        ],
-                      ),
-                      // Venue
-                      if (venue.isNotEmpty && venue != 'TBD')
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.location_on,
-                                size: 8,
-                                color: Colors.white.withOpacity(0.8),
-                              ),
-                              const SizedBox(width: 2),
-                              Expanded(
-                                child: Text(
-                                  venue,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  tournamentName,
                                   style: TextStyle(
-                                    fontSize: 7,
-                                    color: Colors.white.withOpacity(0.8),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    color: sportColor,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                            ],
+                                Flexible(
+                                  child: Row(
+                                    children: [
+                                      if (round != null && matchNumber != null)
+                                        Expanded(
+                                          child: Text(
+                                            'R$round • M$matchNumber',
+                                            style: TextStyle(
+                                              fontSize: 7,
+                                              color: Colors.grey[600],
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      const SizedBox(width: 4),
+                                      if (startTime != null && endTime != null)
+                                        Flexible(
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                              vertical: 1,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: sportColor.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '${_formatTime(startTime)}',
+                                              style: TextStyle(
+                                                fontSize: 7,
+                                                color: sportColor,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          // Edit button - Always visible
+                          // if (widget.isEditable)
+                          //   Container(
+                          //     decoration: BoxDecoration(
+                          //       color: sportColor.withOpacity(0.1),
+                          //       borderRadius: BorderRadius.circular(8),
+                          //     ),
+                          //     child: IconButton(
+                          //       icon: Icon(
+                          //         Icons.edit_calendar,
+                          //         size: 14,
+                          //         color: sportColor,
+                          //       ),
+                          //       onPressed: () =>
+                          //           _editMatchDateTime(context, event, allSchedules),
+                          //       padding: const EdgeInsets.all(4),
+                          //       constraints: const BoxConstraints(
+                          //         minWidth: 24,
+                          //         minHeight: 24,
+                          //       ),
+                          //     ),
+                          //   ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Match text with proper truncation
+                      Flexible(
+                        child: Text(
+                          matchText,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                      const SizedBox(height: 4),
+                      // Meta chips row
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 2,
+                        children: [
+                          _buildCompactMetaChip(
+                            Icons.sports,
+                            sportName,
+                            sportColor,
+                          ),
+                          if (durationText.isNotEmpty)
+                            _buildCompactMetaChip(
+                              Icons.timer,
+                              durationText,
+                              Colors.orange,
+                            ),
+                          if (venue.isNotEmpty && venue != 'TBD')
+                            _buildCompactMetaChip(
+                              Icons.location_on,
+                              venue.length > 10 ? '${venue.substring(0, 8)}...' : venue,
+                              Colors.grey,
+                            ),
+                          if (gender.isNotEmpty)
+                            _buildCompactMetaChip(
+                              gender == 'Men' ? Icons.male : Icons.female,
+                              gender,
+                              gender == 'Men' ? Colors.blue : Colors.pink,
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -877,6 +964,37 @@ Widget _buildOptimizedGridEventCard(
   );
 }
 
+Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+    constraints: const BoxConstraints(maxWidth: 100),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 8, color: color),
+        const SizedBox(width: 2),
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 7,
+              fontWeight: FontWeight.w500,
+              color: color,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+ 
   Widget _buildOptimizedInfoChip(IconData icon, String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
@@ -2630,6 +2748,472 @@ Widget _buildOptimizedGridEventCard(
     }
   }
 
+  Future<void> _showCreateAnnouncementDialog() async {
+    final TextEditingController _announcementController =
+        TextEditingController();
+    String selectedType = 'General Update';
+    final List<String> announcementTypes = [
+      'General Update',
+      'Schedule Change',
+      'Venue Change',
+      'Weather Advisory',
+      'Important Notice',
+      'Emergency',
+    ];
+
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Create Announcement'),
+              content: Container(
+                width: 500,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Announcement Type',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<String>(
+                        value: selectedType,
+                        isExpanded: true,
+                        underline: const SizedBox(),
+                        items: announcementTypes.map((String type) {
+                          return DropdownMenuItem<String>(
+                            value: type,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _getAnnouncementIcon(type),
+                                  size: 18,
+                                  color: _getAnnouncementColor(type),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(type),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          if (newValue != null) {
+                            setDialogState(() {
+                              selectedType = newValue;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Title',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _announcementController,
+                      maxLines: 2,
+                      maxLength: 200,
+                      decoration: InputDecoration(
+                        hintText: 'Enter your announcement here...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (_announcementController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please enter an announcement'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    final announcement = {
+                      'id':
+                          'announcement_${DateTime.now().millisecondsSinceEpoch}',
+                      'type': selectedType,
+                      'message': _announcementController.text.trim(),
+                      'timestamp': FieldValue.serverTimestamp(),
+                      'date': _displayDateFormat.format(DateTime.now()),
+                      'time': _timeFormat.format(DateTime.now()),
+                      'isRead': false,
+                      'priority':
+                          selectedType == 'Emergency' ? 'high' : 'normal',
+                    };
+
+                    try {
+                      await _announcementService
+                          .createAnnouncement(announcement);
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content:
+                                const Text('Announcement created successfully'),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error creating announcement: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Post Announcement'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  IconData _getAnnouncementIcon(String type) {
+    switch (type) {
+      case 'Schedule Change':
+        return Icons.update;
+      case 'Venue Change':
+        return Icons.location_on;
+      case 'Weather Advisory':
+        return Icons.wb_sunny;
+      case 'Important Notice':
+        return Icons.priority_high;
+      case 'Emergency':
+        return Icons.warning;
+      default:
+        return Icons.campaign;
+    }
+  }
+
+  Color _getAnnouncementColor(String type) {
+    switch (type) {
+      case 'Schedule Change':
+        return Colors.blue;
+      case 'Venue Change':
+        return Colors.orange;
+      case 'Weather Advisory':
+        return Colors.amber;
+      case 'Important Notice':
+        return Colors.purple;
+      case 'Emergency':
+        return Colors.red;
+      default:
+        return Colors.green;
+    }
+  }
+
+  void _showManageAnnouncementsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Row(
+                children: [
+                  Icon(Icons.campaign, color: Colors.blue[700], size: 28),
+                  const SizedBox(width: 12),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Manage Announcements',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'View, edit, and delete announcements',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _announcementService.getLatestAnnouncements(limit: 50),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.error, color: Colors.red[400], size: 48),
+                            const SizedBox(height: 8),
+                            Text('Error loading announcements: ${snapshot.error}'),
+                            TextButton(
+                              onPressed: () => setState(() {}),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.campaign_outlined, size: 64, color: Colors.grey),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No announcements yet',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Create your first announcement using the Announce button',
+                              style: TextStyle(color: Colors.grey[500]),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final announcements = snapshot.data!;
+                    return ListView.builder(
+                      controller: scrollController,
+                      itemCount: announcements.length,
+                      itemBuilder: (context, index) {
+                        final announcement = announcements[index];
+                        final timestamp = announcement['timestamp'] as Timestamp?;
+                        final timeAgo = timestamp != null 
+                            ? _formatTimeAgo(timestamp.toDate()) 
+                            : 'Unknown';
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.all(16),
+                            leading: CircleAvatar(
+                              backgroundColor: _getAnnouncementColor(announcement['type'] ?? 'General Update'),
+                              child: Icon(
+                                _getAnnouncementIcon(announcement['type'] ?? 'General Update'),
+                                color: Colors.white,
+                              ),
+                            ),
+                            title: Text(
+                              announcement['message'] ?? '',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(announcement['type'] ?? 'General Update'),
+                                Text(timeAgo, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                              ],
+                            ),
+                            trailing: PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert),
+                              onSelected: (value) {
+                                if (value == 'edit') {
+                                  _showEditAnnouncementDialog(context, announcement);
+                                } else if (value == 'delete') {
+                                  _showDeleteConfirmationDialog(context, announcement['id']);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit), SizedBox(width: 8), Text('Edit')])),
+                                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red))])),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  void _showEditAnnouncementDialog(BuildContext context, Map<String, dynamic> announcement) {
+    final controller = TextEditingController(text: announcement['message'] ?? '');
+    final type = announcement['type'] ?? 'General Update';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Announcement'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              value: type,
+              decoration: const InputDecoration(labelText: 'Type'),
+              items: ['General Update', 'Schedule Change', 'Venue Change', 'Weather Advisory', 'Important Notice', 'Emergency']
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                  .toList(),
+              onChanged: null,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Message',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await _announcementService.updateAnnouncement(
+                  announcement['id'],
+                  {'message': controller.text.trim(), 'type': type},
+                );
+                if (context.mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Announcement updated')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmationDialog(BuildContext context, String id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Announcement'),
+        content: const Text('Are you sure you want to delete this announcement? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              try {
+                await _announcementService.deleteAnnouncement(id);
+                if (context.mounted) Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Announcement deleted')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2709,6 +3293,66 @@ Widget _buildOptimizedGridEventCard(
                   child: _buildFilterSection(_availableSports),
                 ),
                 const SizedBox(width: 12),
+                // Container(
+                //   decoration: BoxDecoration(
+                //     color: Colors.blue,
+                //     borderRadius: BorderRadius.circular(8),
+                //   ),
+                //   // child: Tooltip(
+                //   //   message: 'Create Announcement',
+                //   //   child: Material(
+                //   //     color: Colors.transparent,
+                //   //     child: InkWell(
+                //   //       onTap: _showCreateAnnouncementDialog,
+                //   //       borderRadius: BorderRadius.circular(8),
+                //   //       child: Padding(
+                //   //         padding: const EdgeInsets.symmetric(
+                //   //           horizontal: 12,
+                //   //           vertical: 8,
+                //   //         ),
+                //   //         child: Row(
+                //   //           mainAxisSize: MainAxisSize.min,
+                //   //           children: [
+                //   //             const Icon(
+                //   //               Icons.campaign,
+                //   //               color: Colors.white,
+                //   //               size: 18,
+                //   //             ),
+                //   //             const SizedBox(width: 4),
+                //   //             const Text(
+                //   //               'Announce',
+                //   //               style: TextStyle(
+                //   //                 color: Colors.white,
+                //   //                 fontWeight: FontWeight.w600,
+                //   //                 fontSize: 13,
+                //   //               ),
+                //   //             ),
+                //   //             const SizedBox(width: 4),
+                //   //             Container(
+                //   //               padding: const EdgeInsets.all(2),
+                //   //               decoration: BoxDecoration(
+                //   //                 color: Colors.white.withOpacity(0.2),
+                //   //                 shape: BoxShape.circle,
+                //   //               ),
+                //   //               child: const Icon(
+                //   //                 Icons.add,
+                //   //                 color: Colors.white,
+                //   //                 size: 12,
+                //   //               ),
+                //   //             ),
+                //   //           ],
+                //   //         ),
+                //   //       ),
+                //   //     ),
+                //   //   ),
+                //   // ),
+                // ),
+                // const SizedBox(width: 8),
+                // IconButton(
+                //   icon: const Icon(Icons.list_alt, color: Color.fromARGB(255, 5, 33, 57)),
+                //   onPressed: () => _showManageAnnouncementsBottomSheet(context),
+                //   tooltip: 'Manage Announcements',
+                // ),
                 if (_isPrinting)
                   const Padding(
                     padding: EdgeInsets.all(8.0),

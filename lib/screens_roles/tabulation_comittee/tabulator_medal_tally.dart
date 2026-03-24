@@ -963,6 +963,8 @@ class _TournamentCard extends StatelessWidget {
   }
 }
 
+// ... (previous code until _TournamentDetailsSheet class)
+
 class _TournamentDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> tournament;
   final VoidCallback onMedalAssigned;
@@ -1188,6 +1190,7 @@ class _TournamentDetailsSheet extends StatelessWidget {
   }
 }
 
+// ADD THIS MISSING CLASS HERE:
 class AssignMedalDialog extends StatefulWidget {
   final String tournamentId;
   final String tournamentName;
@@ -1289,6 +1292,11 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
       
     } catch (e) {
       setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading participants: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -1331,14 +1339,47 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
   void _selectTeam(String teamId) {
     setState(() {
       if (_activeMedal == 'gold') {
+        // If this team is already silver or bronze, clear those first
+        if (teamId == _selectedSilverId) {
+          _selectedSilverId = null;
+        }
+        if (teamId == _selectedBronzeId) {
+          _selectedBronzeId = null;
+        }
         _selectedGoldId = teamId;
         _activeMedal = null;
       } else if (_activeMedal == 'silver') {
+        // If this team is already gold or bronze, clear those first
+        if (teamId == _selectedGoldId) {
+          _selectedGoldId = null;
+        }
+        if (teamId == _selectedBronzeId) {
+          _selectedBronzeId = null;
+        }
         _selectedSilverId = teamId;
         _activeMedal = null;
       } else if (_activeMedal == 'bronze') {
+        // If this team is already gold or silver, clear those first
+        if (teamId == _selectedGoldId) {
+          _selectedGoldId = null;
+        }
+        if (teamId == _selectedSilverId) {
+          _selectedSilverId = null;
+        }
         _selectedBronzeId = teamId;
         _activeMedal = null;
+      }
+    });
+  }
+
+  void _removeMedal(String medalType) {
+    setState(() {
+      if (medalType == 'gold') {
+        _selectedGoldId = null;
+      } else if (medalType == 'silver') {
+        _selectedSilverId = null;
+      } else if (medalType == 'bronze') {
+        _selectedBronzeId = null;
       }
     });
   }
@@ -1421,20 +1462,20 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // Medal selection tabs
+                      // Medal selection tabs with remove option
                       Row(
                         children: [
-                          _buildMedalTab('Gold', Colors.amber, 'gold'),
+                          _buildMedalTab('Gold', Colors.amber, 'gold', _selectedGoldId != null),
                           const SizedBox(width: 8),
-                          _buildMedalTab('Silver', Colors.grey, 'silver'),
+                          _buildMedalTab('Silver', Colors.grey, 'silver', _selectedSilverId != null),
                           const SizedBox(width: 8),
-                          _buildMedalTab('Bronze', Colors.brown, 'bronze'),
+                          _buildMedalTab('Bronze', Colors.brown, 'bronze', _selectedBronzeId != null),
                         ],
                       ),
                       
                       const SizedBox(height: 16),
                       
-                      // Current selections
+                      // Current selections with remove buttons
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -1443,16 +1484,48 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
                         ),
                         child: Row(
                           children: [
-                            _buildSelectionBadge('GOLD', _selectedGoldId, Colors.amber),
-                            Container(width: 1, height: 30, color: Colors.grey.shade300),
-                            _buildSelectionBadge('SILVER', _selectedSilverId, Colors.grey),
-                            Container(width: 1, height: 30, color: Colors.grey.shade300),
-                            _buildSelectionBadge('BRONZE', _selectedBronzeId, Colors.brown),
+                            _buildSelectionBadge('GOLD', _selectedGoldId, Colors.amber, 'gold'),
+                            Container(width: 1, height: 40, color: Colors.grey.shade300),
+                            _buildSelectionBadge('SILVER', _selectedSilverId, Colors.grey, 'silver'),
+                            Container(width: 1, height: 40, color: Colors.grey.shade300),
+                            _buildSelectionBadge('BRONZE', _selectedBronzeId, Colors.brown, 'bronze'),
                           ],
                         ),
                       ),
                       
                       const SizedBox(height: 16),
+                      
+                      // Instruction text
+                      if (_activeMedal == null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Tap on Gold, Silver, or Bronze above to select a medal type, then tap on a team to assign',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Selecting team for ${_activeMedal!.toUpperCase()} medal...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _activeMedal == 'gold' ? Colors.amber :
+                                     _activeMedal == 'silver' ? Colors.grey :
+                                     Colors.brown,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      
+                      const SizedBox(height: 8),
                       
                       // Search
                       TextField(
@@ -1474,7 +1547,7 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
                       
                       const SizedBox(height: 16),
                       
-                      // Teams list with pagination
+                      // Teams list
                       Expanded(
                         child: _buildTeamsList(),
                       ),
@@ -1516,8 +1589,6 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
   }
 
   Widget _buildTeamsList() {
-    // Add pagination for teams list
-    const int teamsPerPage = 20;
     return ListView.builder(
       itemCount: _filteredParticipants.length,
       itemBuilder: (context, index) {
@@ -1555,26 +1626,28 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
     );
   }
 
-  Widget _buildMedalTab(String label, Color color, String medalType) {
+  Widget _buildMedalTab(String label, Color color, String medalType, bool isSelected) {
     final isActive = _activeMedal == medalType;
-    final isSelected = medalType == 'gold' ? _selectedGoldId != null :
-                      medalType == 'silver' ? _selectedSilverId != null :
-                      _selectedBronzeId != null;
     
     return Expanded(
       child: InkWell(
         onTap: () {
           setState(() {
-            _activeMedal = _activeMedal == medalType ? null : medalType;
+            // Toggle active medal - if clicking the same medal, deactivate it
+            if (_activeMedal == medalType) {
+              _activeMedal = null;
+            } else {
+              _activeMedal = medalType;
+            }
           });
         },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isActive ? color.withOpacity(0.1) : Colors.transparent,
+            color: isActive ? color.withOpacity(0.2) : (isSelected ? color.withOpacity(0.1) : Colors.transparent),
             border: Border.all(
-              color: isActive ? color : Colors.grey.shade300,
-              width: 1.5,
+              color: isActive ? color : (isSelected ? color : Colors.grey.shade300),
+              width: isActive ? 2 : 1.5,
             ),
             borderRadius: BorderRadius.circular(8),
           ),
@@ -1588,8 +1661,8 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
                 label,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isActive ? color : Colors.grey.shade700,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                  color: isActive ? color : (isSelected ? color : Colors.grey.shade700),
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
                 ),
               ),
             ],
@@ -1599,18 +1672,31 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
     );
   }
 
-  Widget _buildSelectionBadge(String label, String? teamId, Color color) {
+  Widget _buildSelectionBadge(String label, String? teamId, Color color, String medalType) {
     final teamName = teamId != null ? _teamNameCache[teamId] ?? 'Selected' : 'Not set';
     return Expanded(
       child: Column(
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+              if (teamId != null)
+                IconButton(
+                  icon: Icon(Icons.close, size: 14, color: Colors.grey.shade500),
+                  onPressed: () => _removeMedal(medalType),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  splashRadius: 16,
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
@@ -1664,8 +1750,25 @@ class _AssignMedalDialogState extends State<AssignMedalDialog> {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400, width: 1.5),
+                  border: Border.all(
+                    color: _activeMedal == 'gold' ? Colors.amber :
+                           _activeMedal == 'silver' ? Colors.grey :
+                           Colors.brown,
+                    width: 2,
+                  ),
                   shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: _activeMedal == 'gold' ? Colors.amber :
+                             _activeMedal == 'silver' ? Colors.grey :
+                             Colors.brown,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                 ),
               )
             else

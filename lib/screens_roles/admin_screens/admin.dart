@@ -157,8 +157,7 @@ class _AdminScreenState extends State<AdminScreen>
         return const ParticipantsManagementScreen();
       case 'Venue Management':
         return const VenueManagementScreen();
-      case 'Match schedule Management':
-        return const TournamentCalendarScreen();
+      
       case 'Sports Event Mngmt':
         return const SportsEventManagementList();
       case 'Tournament Mngmt':
@@ -166,7 +165,7 @@ class _AdminScreenState extends State<AdminScreen>
       case 'Scheduling':
         return const AdminTeamScheduleManagementScreen();
       case 'Matrix View':
-        return const TournamentCalendarScreen();
+        return const SchedulesAdmin();
 
       case 'Dashboard':
         return const AdminDashboard();

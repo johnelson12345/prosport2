@@ -7,6 +7,7 @@ import 'package:tabulation_systemv7/screens_roles/admin_screens/sports_eventmngm
 import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_mngmt_screen.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/tournament_scheduling.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/admin_dashboard.dart';
+import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/reports_analytics.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/assigned_games.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/score_encoding.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/announcements.dart';
@@ -35,6 +36,7 @@ class _TournamentMainState extends State<TournamentMain>
     'Announcements',
     'Assigned Games',
     'Score Encoding',
+    'Reports'
   ];
   List<String> _filteredMenuItems = [];
   bool _isDrawerExpanded = true;
@@ -187,7 +189,8 @@ class _TournamentMainState extends State<TournamentMain>
         return const TournamentTeamScheduleManagementScreen();
       case 'Score Encoding':
         return const ScoreEncodingScreen();
-
+      case 'Reports':
+       return const ReportsAnalytics();
       case 'Sports Event Mngmt':
         return const SportsEventManagementList();
       case 'Tournament Mngmt':
@@ -611,6 +614,9 @@ class _TournamentMainState extends State<TournamentMain>
                       break;
                     case 'Score Encoding':
                       iconData = Icons.scoreboard;
+                      break;
+                    case 'Reports':
+                      iconData = Icons.bar_chart;
                       break;
                     case 'Announcements':
                       iconData = Icons.announcement;

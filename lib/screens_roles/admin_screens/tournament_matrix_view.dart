@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tabulation_systemv7/services/team_schedule_service.dart';
@@ -7,11 +9,262 @@ import 'package:async/async.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:tabulation_systemv7/services/tournament_calendar_printing.dart';
 
-class TournamentCalendarScreen extends StatefulWidget {
+class _MatchDetailPopup extends StatelessWidget {
+  final Map<String, dynamic> event;
+  final Color sportColor;
+  final String matchText;
+  final String timeDisplay;
+  final String venue;
+  final int matchNumber;
+  final int? round;
+  final String tournamentName;
+  final String categoryName;
+  final String gender;
+  final VoidCallback onEdit;
+  final Offset position;
+  final VoidCallback onClose;
+
+  const _MatchDetailPopup({
+    required this.event,
+    required this.sportColor,
+    required this.matchText,
+    required this.timeDisplay,
+    required this.venue,
+    required this.matchNumber,
+    required this.round,
+    required this.tournamentName,
+    required this.categoryName,
+    required this.gender,
+    required this.onEdit,
+    required this.position,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Get screen size to ensure popup stays within bounds
+    final screenSize = MediaQuery.of(context).size;
+    const popupWidth = 320.0;
+    const popupHeight = 380.0; // Approximate height of the popup
+    
+    // Calculate centered position
+    double left = position.dx - (popupWidth / 2);
+    double top = position.dy - (popupHeight / 2);
+    
+    // Adjust if popup would go off screen
+    if (left < 10) {
+      left = 10;
+    } else if (left + popupWidth > screenSize.width - 10) {
+      left = screenSize.width - popupWidth - 10;
+    }
+    
+    if (top < 10) {
+      top = 10;
+    } else if (top + popupHeight > screenSize.height - 10) {
+      top = screenSize.height - popupHeight - 10;
+    }
+    
+    return Positioned(
+      left: left,
+      top: top,
+      child: Material(
+        color: Colors.transparent,
+        child: GestureDetector(
+          onTap: onClose,
+          child: TweenAnimationBuilder(
+            duration: const Duration(milliseconds: 200),
+            tween: Tween<double>(begin: 0, end: 1),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: 0.8 + (value * 0.2),
+                child: Opacity(
+                  opacity: value,
+                  child: Container(
+                    width: popupWidth,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          sportColor,
+                          sportColor.withOpacity(0.9),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: sportColor.withOpacity(0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Header
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.white.withOpacity(0.2),
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    tournamentName.toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: onClose,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Content
+                          Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Match title
+                                Text(
+                                  matchText,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                // Time
+                                _buildDetailRow(
+                                  Icons.access_time,
+                                  timeDisplay,
+                                ),
+                                const SizedBox(height: 12),
+                                // Venue
+                                _buildDetailRow(
+                                  Icons.location_on,
+                                  venue == 'TBD' ? 'Venue: To be determined' : venue,
+                                ),
+                                const SizedBox(height: 12),
+                                // Round/Match number
+                                _buildDetailRow(
+                                  round != null && round! > 1 ? Icons.flag : Icons.sports,
+                                  round != null && round! > 1 ? 'Round $round' : 'Match #$matchNumber',
+                                ),
+                                if (gender.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  _buildDetailRow(Icons.people, gender),
+                                ],
+                                if (categoryName.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  _buildDetailRow(Icons.category, categoryName),
+                                ],
+                                const SizedBox(height: 20),
+                                // Edit Button
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: () {
+                                      onClose();
+                                      onEdit();
+                                    },
+                                    icon: const Icon(Icons.edit, size: 18),
+                                    label: const Text(
+                                      'Reschedule Match',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: sportColor,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.white70),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.white70,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class SchedulesAdmin extends StatefulWidget {
   final String? tournamentId;
   final bool isEditable;
 
-  const TournamentCalendarScreen({
+  const SchedulesAdmin({
     super.key,
     this.tournamentId,
     this.isEditable = true,
@@ -22,7 +275,7 @@ class TournamentCalendarScreen extends StatefulWidget {
       _TournamentCalendarScreenState();
 }
 
-class _TournamentCalendarScreenState extends State<TournamentCalendarScreen>
+class _TournamentCalendarScreenState extends State<SchedulesAdmin>
     with SingleTickerProviderStateMixin {
   final TeamScheduleService _service = TeamScheduleService();
   final SportsService _sportsService = SportsService();
@@ -56,9 +309,6 @@ class _TournamentCalendarScreenState extends State<TournamentCalendarScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   
-  // Optimized hover state management
-  final ValueNotifier<String?> _hoveredEventNotifier = ValueNotifier<String?>(null);
-  
   // Cache for precomputed data to avoid recalculation
   final Map<String, Color> _sportColorsCache = {};
   final Map<String, String> _matchTextCache = {};
@@ -70,6 +320,10 @@ class _TournamentCalendarScreenState extends State<TournamentCalendarScreen>
   // Hover states for enhanced UI
   int _hoveredColumn = -1;
   int _hoveredRow = -1;
+  
+  // Track active popup
+  OverlayEntry? _activePopup;
+  String? _activePopupEventId;
 
   @override
   void initState() {
@@ -90,9 +344,15 @@ class _TournamentCalendarScreenState extends State<TournamentCalendarScreen>
     _animationController.dispose();
     _horizontalScrollController.dispose();
     _verticalScrollController.dispose();
-    _hoveredEventNotifier.dispose();
     _clearCaches();
+    _hidePopup();
     super.dispose();
+  }
+
+  void _hidePopup() {
+    _activePopup?.remove();
+    _activePopup = null;
+    _activePopupEventId = null;
   }
 
   void _clearCaches() {
@@ -426,249 +686,315 @@ class _TournamentCalendarScreenState extends State<TournamentCalendarScreen>
     return metadata;
   }
 
-  Widget _buildOptimizedGridEventCard(
-    Map<String, dynamic> event,
-    Color sportColor,
-    List<Map<String, dynamic>> allSchedules,
-  ) {
-    final metadata = _getEventMetadata(event);
-    final matchText = metadata['matchText'];
-    final startTime = metadata['startTime'];
-    final endTime = metadata['endTime'];
-    final venue = event['venue'] as String? ?? 'TBD';
-    final matchNumber = event['matchNumber'] as int? ?? 1;
-    final round = event['round'] as int?;
-    final tournamentName = event['tournamentName'] as String? ?? 'Tournament';
-    final categoryName = event['categoryName'] as String? ?? 'Category';
-    final gender = event['gender'] as String? ?? '';
-    final hasActualTeams = metadata['hasActualTeams'];
-    final eventId = event['id'] as String? ?? '';
-    
-    // Format time for tooltip
-    final timeDisplay = startTime != null && endTime != null
-        ? '${_formatTime(startTime)} - ${_formatTime(endTime)}'
-        : 'Time TBD';
-    
-    // Build detailed tooltip message
-    final tooltipMessage = '''
-$matchText
+ Widget _buildOptimizedGridEventCard(
+  Map<String, dynamic> event,
+  Color sportColor,
+  List<Map<String, dynamic>> allSchedules,
+) {
+  final metadata = _getEventMetadata(event);
+  final matchText = metadata['matchText'];
+  final startTime = metadata['startTime'];
+  final endTime = metadata['endTime'];
+  final venue = event['venue'] as String? ?? 'TBD';
+  final matchNumber = event['matchNumber'] as int? ?? 1;
+  final round = event['round'] as int?;
+  final tournamentName = event['tournamentName'] as String? ?? 'Tournament';
+  final categoryName = event['categoryName'] as String? ?? 'Category';
+  final gender = event['gender'] as String? ?? '';
+  final durationText = metadata['durationText'];
+  final sportName = event['sportName'] as String? ?? event['sport'] as String? ?? 'Sport';
+  final timeDisplay = startTime != null && endTime != null
+      ? '${_formatTime(startTime)} - ${_formatTime(endTime)}'
+      : 'Time TBD';
+  final eventId = event['id'] as String? ?? '';
 
-🕐 Time: $timeDisplay
-📍 Venue: ${venue == 'TBD' ? 'To be determined' : venue}
-🏆 ${round != null ? 'Round $round' : 'Match #$matchNumber'}
-${gender.isNotEmpty ? '👥 Gender: $gender' : ''}
-🏷️ Category: $categoryName
-${tournamentName.isNotEmpty ? '🎯 Tournament: $tournamentName' : ''}
-''';
+  Timer? _hoverTimer;
 
-    return ValueListenableBuilder<String?>(
-      valueListenable: _hoveredEventNotifier,
-      builder: (context, hoveredId, child) {
-        final isHovered = hoveredId == eventId;
-        
-        return MouseRegion(
-          onEnter: (_) => _hoveredEventNotifier.value = eventId,
-          onExit: (_) => _hoveredEventNotifier.value = null,
-          child: RepaintBoundary(
-            child: Tooltip(
-              message: tooltipMessage,
-              preferBelow: false,
-              verticalOffset: -40,
-              padding: const EdgeInsets.all(12),
-              textStyle: const TextStyle(
-                fontSize: 12,
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-              ),
+  // Declare functions first
+  void _hidePopup() {
+    _activePopup?.remove();
+    _activePopup = null;
+    _activePopupEventId = null;
+  }
+
+  void _showPopup(BuildContext context, Offset position) {
+    if (_activePopupEventId == eventId) return;
+    
+    _hidePopup();
+    
+    _activePopup = OverlayEntry(
+      builder: (context) => _MatchDetailPopup(
+        event: event,
+        sportColor: sportColor,
+        matchText: matchText,
+        timeDisplay: timeDisplay,
+        venue: venue,
+        matchNumber: matchNumber,
+        round: round,
+        tournamentName: tournamentName,
+        categoryName: categoryName,
+        gender: gender,
+        onEdit: () {
+          _hidePopup();
+          _editMatchDateTime(context, event, allSchedules);
+        },
+        onClose: _hidePopup,
+        position: position,
+      ),
+    );
+    
+    _activePopupEventId = eventId;
+    Overlay.of(context).insert(_activePopup!);
+  }
+
+  void _startHoverTimer(BuildContext context, Offset position) {
+    _hoverTimer?.cancel();
+    _hoverTimer = Timer(const Duration(milliseconds: 300), () {
+      _showPopup(context, position);
+    });
+  }
+
+  void _cancelHoverTimer() {
+    _hoverTimer?.cancel();
+    _hidePopup();
+  }
+
+  return MouseRegion(
+    onEnter: (PointerEvent details) {
+      final RenderBox renderBox = context.findRenderObject() as RenderBox;
+      final Offset position = renderBox.localToGlobal(Offset.zero);
+      _startHoverTimer(context, position);
+    },
+    onExit: (_) {
+      _cancelHoverTimer();
+      _hidePopup();
+    },
+    child: RepaintBoundary(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        transform: _activePopupEventId == eventId
+            ? Matrix4.diagonal3Values(1.02, 1.02, 1)
+            : Matrix4.identity(),
+        child: Material(
+          elevation: _activePopupEventId == eventId ? 8 : 2,
+          shadowColor: sportColor.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            onTap: widget.isEditable 
+                ? () => _editMatchDateTime(context, event, allSchedules)
+                : null,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 85, maxHeight: 95),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    sportColor,
-                    sportColor.withOpacity(0.9),
+                    sportColor.withOpacity(0.05),
+                    Colors.white,
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: sportColor.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                border: Border.all(
+                  color: sportColor.withOpacity(0.3),
+                  width: 1.5,
+                ),
               ),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                curve: Curves.easeOutCubic,
-                transform: isHovered
-                    ? Matrix4.diagonal3Values(1.03, 1.03, 1)
-                    : Matrix4.identity(),
-                child: Material(
-                  elevation: isHovered ? 8 : 4,
-                  shadowColor: sportColor.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
-                    onTap: widget.isEditable 
-                        ? () => _editMatchDateTime(context, event, allSchedules)
-                        : null,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            sportColor,
-                            sportColor.withOpacity(0.85),
-                            sportColor.withOpacity(0.7),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Stack(
-                          children: [
-                            // Background pattern - only on hover for performance
-                            if (isHovered)
-                              Positioned.fill(
-                                child: CustomPaint(
-                                  painter: MatrixPatternPainter(sportColor),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header with tournament name and edit button
+                      Row(
+                        children: [
+                          Container(
+                            width: 4,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: sportColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  tournamentName,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    color: sportColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                            // Content
-                            Padding(
-                              padding: const EdgeInsets.all(6),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Tournament name badge
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.25),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      tournamentName,
-                                      style: const TextStyle(
-                                        fontSize: 7,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  // Match text with optimized animation
-                                  AnimatedDefaultTextStyle(
-                                    duration: const Duration(milliseconds: 150),
-                                    curve: Curves.easeOutCubic,
-                                    style: TextStyle(
-                                      fontSize: isHovered 
-                                          ? (hasActualTeams ? 13 : 11)
-                                          : (hasActualTeams ? 10 : 8),
-                                      fontWeight: isHovered ? FontWeight.w800 : FontWeight.w700,
-                                      color: Colors.white,
-                                      height: 1.2,
-                                    ),
-                                    child: Text(
-                                      matchText,
-                                      textAlign: TextAlign.center,
-                                      maxLines: isHovered ? 3 : 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  // Time and round info - simplified
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                Flexible(
+                                  child: Row(
                                     children: [
-                                      if (startTime != null && endTime != null)
-                                        _buildOptimizedInfoChip(
-                                          Icons.access_time,
-                                          _formatTime(startTime),
-                                          Colors.white,
-                                        ),
-                                      _buildOptimizedInfoChip(
-                                        round != null && round > 1 ? Icons.flag : Icons.sports,
-                                        round != null && round > 1 ? 'R$round' : 'M$matchNumber',
-                                        Colors.white,
-                                      ),
-                                    ],
-                                  ),
-                                  // Venue - simplified
-                                  if (venue.isNotEmpty && venue != 'TBD' && !isHovered)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.location_on,
-                                            size: 6,
-                                            color: Colors.white.withOpacity(0.8),
+                                      if (round != null && matchNumber != null)
+                                        Expanded(
+                                          child: Text(
+                                            'R$round • M$matchNumber',
+                                            style: TextStyle(
+                                              fontSize: 7,
+                                              color: Colors.grey[600],
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          const SizedBox(width: 2),
-                                          Expanded(
+                                        ),
+                                      const SizedBox(width: 4),
+                                      if (startTime != null && endTime != null)
+                                        Flexible(
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                              vertical: 1,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: sportColor.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
                                             child: Text(
-                                              venue,
+                                              '${_formatTime(startTime)}',
                                               style: TextStyle(
-                                                fontSize: 6,
-                                                color: Colors.white.withOpacity(0.8),
+                                                fontSize: 7,
+                                                color: sportColor,
+                                                fontWeight: FontWeight.w500,
                                               ),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            // Edit button - simplified
-                            if (widget.isEditable && isHovered)
-                              Positioned(
-                                top: 2,
-                                right: 2,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.9),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: IconButton(
-                                    icon: const Icon(Icons.edit, size: 8),
-                                    onPressed: () => _editMatchDateTime(context, event, allSchedules),
-                                    padding: const EdgeInsets.all(2),
-                                    constraints: const BoxConstraints(),
-                                    color: sportColor,
+                                        ),
+                                    ],
                                   ),
                                 ),
+                              ],
+                            ),
+                          ),
+                          // Edit button - Always visible
+                          if (widget.isEditable)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: sportColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                          ],
+                              child: IconButton(
+                                icon: Icon(
+                                  Icons.edit_calendar,
+                                  size: 14,
+                                  color: sportColor,
+                                ),
+                                onPressed: () =>
+                                    _editMatchDateTime(context, event, allSchedules),
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(
+                                  minWidth: 24,
+                                  minHeight: 24,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Match text with proper truncation
+                      Flexible(
+                        child: Text(
+                          matchText,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 4),
+                      // Meta chips row
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 2,
+                        children: [
+                          _buildCompactMetaChip(
+                            Icons.sports,
+                            sportName,
+                            sportColor,
+                          ),
+                          if (durationText.isNotEmpty)
+                            _buildCompactMetaChip(
+                              Icons.timer,
+                              durationText,
+                              Colors.orange,
+                            ),
+                          if (venue.isNotEmpty && venue != 'TBD')
+                            _buildCompactMetaChip(
+                              Icons.location_on,
+                              venue.length > 10 ? '${venue.substring(0, 8)}...' : venue,
+                              Colors.grey,
+                            ),
+                          if (gender.isNotEmpty)
+                            _buildCompactMetaChip(
+                              gender == 'Men' ? Icons.male : Icons.female,
+                              gender,
+                              gender == 'Men' ? Colors.blue : Colors.pink,
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      ),
+    ),
+  );
+}
 
+Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+    constraints: const BoxConstraints(maxWidth: 100),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 8, color: color),
+        const SizedBox(width: 2),
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 7,
+              fontWeight: FontWeight.w500,
+              color: color,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+ 
   Widget _buildOptimizedInfoChip(IconData icon, String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
@@ -1617,246 +1943,263 @@ ${tournamentName.isNotEmpty ? '🎯 Tournament: $tournamentName' : ''}
     final sportColor = _getSportColor(sportName);
     final eventId = event['id'] as String? ?? '';
 
-    return ValueListenableBuilder<String?>(
-      valueListenable: _hoveredEventNotifier,
-      builder: (context, hoveredId, child) {
-        final isHovered = hoveredId == eventId;
-        
+    bool _isExpanded = false;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
         return MouseRegion(
-          onEnter: (_) => _hoveredEventNotifier.value = eventId,
-          onExit: (_) => _hoveredEventNotifier.value = null,
-          child: Tooltip(
-            message: matchText,
-            preferBelow: false,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              transform: isHovered
-                  ? Matrix4.diagonal3Values(1.02, 1.02, 1)
-                  : Matrix4.identity(),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
+          onEnter: (_) {
+            setState(() {
+              _isExpanded = true;
+            });
+          },
+          onExit: (_) {
+            setState(() {
+              _isExpanded = false;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            height: _isExpanded ? 280 : 140,
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: sportColor.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: widget.isEditable
+                      ? () => _editMatchDateTime(context, event, allSchedules)
+                      : null,
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: sportColor.withOpacity(0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: widget.isEditable
-                        ? () => _editMatchDateTime(context, event, allSchedules)
-                        : null,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            sportColor.withOpacity(0.05),
-                            Colors.white,
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: sportColor.withOpacity(0.3),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 4,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: sportColor,
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            tournamentName,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: sportColor,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          if (round != null && matchNumber != null)
-                                            Text(
-                                              'Round $round • Match #$matchNumber',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          if (startTime != null && endTime != null)
-                                            Container(
-                                              margin: const EdgeInsets.only(top: 2),
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 6,
-                                                vertical: 2,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: sportColor.withOpacity(0.1),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                '${_formatTime(startTime)} - ${_formatTime(endTime)} • $durationText',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: sportColor,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (widget.isEditable)
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: sportColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: IconButton(
-                                    icon: Icon(
-                                      Icons.edit_calendar,
-                                      size: 18,
-                                      color: sportColor,
-                                    ),
-                                    onPressed: () =>
-                                        _editMatchDateTime(context, event, allSchedules),
-                                    padding: const EdgeInsets.all(6),
-                                    constraints: const BoxConstraints(),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 200),
-                            style: TextStyle(
-                              fontSize: isHovered ? 18 : 16,
-                              fontWeight: isHovered ? FontWeight.w800 : FontWeight.w600,
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 4,
-                                horizontal: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: sportColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                matchText,
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            children: [
-                              _buildMetaChip(
-                                Icons.sports,
-                                sportName,
-                                sportColor,
-                              ),
-                              _buildMetaChip(
-                                Icons.category,
-                                categoryName,
-                                Colors.purple,
-                              ),
-                              if (durationText.isNotEmpty)
-                                _buildMetaChip(
-                                  Icons.timer,
-                                  durationText,
-                                  Colors.orange,
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.location_on,
-                                      size: 14,
-                                      color: Colors.grey[600],
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        venue,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey[600],
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (gender.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: gender == 'Men'
-                                        ? Colors.blue.withOpacity(0.1)
-                                        : gender == 'Women'
-                                            ? Colors.pink.withOpacity(0.1)
-                                            : Colors.green.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    gender,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: gender == 'Men'
-                                          ? Colors.blue
-                                          : gender == 'Women'
-                                              ? Colors.pink
-                                              : Colors.green,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          sportColor.withOpacity(0.05),
+                          Colors.white,
                         ],
                       ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: sportColor.withOpacity(0.3),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 4,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: sportColor,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          tournamentName,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: sportColor,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (round != null && matchNumber != null)
+                                          Text(
+                                            'Round $round • Match #$matchNumber',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        if (startTime != null && endTime != null)
+                                          Container(
+                                            margin: const EdgeInsets.only(top: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: sportColor.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '${_formatTime(startTime)} - ${_formatTime(endTime)} • $durationText',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: sportColor,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (widget.isEditable && _isExpanded)
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: sportColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: IconButton(
+                                  icon: Icon(
+                                    Icons.edit_calendar,
+                                    size: 18,
+                                    color: sportColor,
+                                  ),
+                                  onPressed: () =>
+                                      _editMatchDateTime(context, event, allSchedules),
+                                  padding: const EdgeInsets.all(6),
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          matchText,
+                          style: TextStyle(
+                            fontSize: _isExpanded ? 18 : 16,
+                            fontWeight: _isExpanded ? FontWeight.w800 : FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            _buildMetaChip(
+                              Icons.sports,
+                              sportName,
+                              sportColor,
+                            ),
+                            _buildMetaChip(
+                              Icons.category,
+                              categoryName,
+                              Colors.purple,
+                            ),
+                            if (durationText.isNotEmpty)
+                              _buildMetaChip(
+                                Icons.timer,
+                                durationText,
+                                Colors.orange,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.location_on,
+                                    size: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      venue,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[600],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (gender.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: gender == 'Men'
+                                      ? Colors.blue.withOpacity(0.1)
+                                      : gender == 'Women'
+                                          ? Colors.pink.withOpacity(0.1)
+                                          : Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  gender,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: gender == 'Men'
+                                        ? Colors.blue
+                                        : gender == 'Women'
+                                            ? Colors.pink
+                                            : Colors.green,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (_isExpanded && widget.isEditable)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _editMatchDateTime(context, event, allSchedules),
+                                icon: Icon(Icons.edit_calendar, size: 16, color: sportColor),
+                                label: const Text(
+                                  'Reschedule Match',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: sportColor,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -2285,6 +2628,121 @@ ${tournamentName.isNotEmpty ? '🎯 Tournament: $tournamentName' : ''}
       if (mounted) {
         setState(() {
           _editingEvents.remove(eventId);
+        });
+      }
+    }
+  }
+
+  Future<void> _printCalendar() async {
+    setState(() {
+      _isPrinting = true;
+    });
+
+    try {
+      final data = await StreamZip([
+        widget.tournamentId != null
+            ? _service.getTeamSchedulesByTournament(widget.tournamentId!)
+            : _service.getAllTeamSchedules(),
+        _sportsService.getSportsStream(),
+      ]).first;
+
+      final schedules = data[0] as List<Map<String, dynamic>>;
+      final sportsSnapshot = data[1] as QuerySnapshot;
+
+      final scheduleSports = schedules
+          .map((s) =>
+              s['sport'] as String? ??
+              s['sportName'] as String? ??
+              'Unknown Sport')
+          .toSet();
+
+      final allSports = sportsSnapshot.docs
+          .map((doc) => doc['name'] as String? ?? 'Unknown Sport')
+          .toSet();
+
+      final sports = (scheduleSports.union(allSports)).toList()..sort();
+
+      final daySchedules = schedules.where((s) {
+        final dateTimeStr = s['dateTime'] as String? ?? '';
+        final dateTime = _parseDateTime(dateTimeStr);
+        return dateTime != null &&
+            dateTime.year == _selectedDate.year &&
+            dateTime.month == _selectedDate.month &&
+            dateTime.day == _selectedDate.day;
+      }).toList();
+
+      final timeSlots = List.generate(17, (index) {
+        final hour = 6 + index;
+        return DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          hour,
+        );
+      }).map((dt) {
+        final hour = dt.hour;
+        final period = hour >= 12 ? 'PM' : 'AM';
+        final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+        return '$hour12:00 $period';
+      }).toList();
+
+      final calendarMap = <String, Map<String, List<Map<String, dynamic>>>>{};
+      for (final schedule in daySchedules) {
+        final dateTimeStr = schedule['dateTime'] as String? ?? '';
+        final dateTime = _parseDateTime(dateTimeStr);
+
+        if (dateTime != null) {
+          final hour = dateTime.hour;
+          final period = hour >= 12 ? 'PM' : 'AM';
+          final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+          final timeKey = '$hour12:00 $period';
+
+          final sportKey = schedule['sport'] as String? ??
+              schedule['sportName'] as String? ??
+              'Unknown Sport';
+
+          calendarMap.putIfAbsent(timeKey, () => {});
+          calendarMap[timeKey]!.putIfAbsent(sportKey, () => []);
+          calendarMap[timeKey]![sportKey]!.add(schedule);
+        }
+      }
+
+      await TournamentCalendarPrinting.printCalendar(
+        timeSlots,
+        sports,
+        calendarMap,
+        _selectedDate,
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Calendar exported successfully'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting calendar: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPrinting = false;
         });
       }
     }
@@ -2754,121 +3212,6 @@ ${tournamentName.isNotEmpty ? '🎯 Tournament: $tournamentName' : ''}
         ],
       ),
     );
-  }
-
-  Future<void> _printCalendar() async {
-    setState(() {
-      _isPrinting = true;
-    });
-
-    try {
-      final data = await StreamZip([
-        widget.tournamentId != null
-            ? _service.getTeamSchedulesByTournament(widget.tournamentId!)
-            : _service.getAllTeamSchedules(),
-        _sportsService.getSportsStream(),
-      ]).first;
-
-      final schedules = data[0] as List<Map<String, dynamic>>;
-      final sportsSnapshot = data[1] as QuerySnapshot;
-
-      final scheduleSports = schedules
-          .map((s) =>
-              s['sport'] as String? ??
-              s['sportName'] as String? ??
-              'Unknown Sport')
-          .toSet();
-
-      final allSports = sportsSnapshot.docs
-          .map((doc) => doc['name'] as String? ?? 'Unknown Sport')
-          .toSet();
-
-      final sports = (scheduleSports.union(allSports)).toList()..sort();
-
-      final daySchedules = schedules.where((s) {
-        final dateTimeStr = s['dateTime'] as String? ?? '';
-        final dateTime = _parseDateTime(dateTimeStr);
-        return dateTime != null &&
-            dateTime.year == _selectedDate.year &&
-            dateTime.month == _selectedDate.month &&
-            dateTime.day == _selectedDate.day;
-      }).toList();
-
-      final timeSlots = List.generate(17, (index) {
-        final hour = 6 + index;
-        return DateTime(
-          _selectedDate.year,
-          _selectedDate.month,
-          _selectedDate.day,
-          hour,
-        );
-      }).map((dt) {
-        final hour = dt.hour;
-        final period = hour >= 12 ? 'PM' : 'AM';
-        final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-        return '$hour12:00 $period';
-      }).toList();
-
-      final calendarMap = <String, Map<String, List<Map<String, dynamic>>>>{};
-      for (final schedule in daySchedules) {
-        final dateTimeStr = schedule['dateTime'] as String? ?? '';
-        final dateTime = _parseDateTime(dateTimeStr);
-
-        if (dateTime != null) {
-          final hour = dateTime.hour;
-          final period = hour >= 12 ? 'PM' : 'AM';
-          final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-          final timeKey = '$hour12:00 $period';
-
-          final sportKey = schedule['sport'] as String? ??
-              schedule['sportName'] as String? ??
-              'Unknown Sport';
-
-          calendarMap.putIfAbsent(timeKey, () => {});
-          calendarMap[timeKey]!.putIfAbsent(sportKey, () => []);
-          calendarMap[timeKey]![sportKey]!.add(schedule);
-        }
-      }
-
-      await TournamentCalendarPrinting.printCalendar(
-        timeSlots,
-        sports,
-        calendarMap,
-        _selectedDate,
-      );
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Calendar exported successfully'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error exporting calendar: $e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isPrinting = false;
-        });
-      }
-    }
   }
 
   @override
