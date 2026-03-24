@@ -175,9 +175,9 @@ class _TournamentOfficialBracketDialogState
     return participantId;
   }
 
-  // Resolve any team reference to its actual name
-  Future<String> _resolveTeamName(dynamic team) async {
-    if (team == null) return 'TBD';
+  // Helper method to extract placeholder info from a team object
+  Map<String, dynamic>? _extractPlaceholderInfo(dynamic team) {
+    if (team == null) return null;
     
     // If it's a map
     if (team is Map<String, dynamic>) {
@@ -186,24 +186,101 @@ class _TournamentOfficialBracketDialogState
         int? sourceMatchNum;
         bool needWinner = true;
         
+        // Try to get source match number from various possible fields
         if (team['sourceMatch'] != null) {
           sourceMatchNum = team['sourceMatch'] is int 
               ? team['sourceMatch'] 
               : int.tryParse(team['sourceMatch'].toString());
+        } else if (team['sourceMatchNumber'] != null) {
+          sourceMatchNum = team['sourceMatchNumber'] is int 
+              ? team['sourceMatchNumber'] 
+              : int.tryParse(team['sourceMatchNumber'].toString());
+        } else if (team['matchNumber'] != null) {
+          sourceMatchNum = team['matchNumber'] is int 
+              ? team['matchNumber'] 
+              : int.tryParse(team['matchNumber'].toString());
         }
         
-        needWinner = team['name']?.toString().contains('Winner') ?? 
-                     team['displayName']?.toString().contains('Winner') ?? true;
+        // Determine if we need winner or loser
+        final name = team['name']?.toString() ?? team['displayName']?.toString() ?? '';
+        needWinner = name.contains('Winner') || 
+                     name.contains('winner') ||
+                     (team['type'] == 'placeholder' && !name.contains('Loser'));
         
-        if (sourceMatchNum != null && _matchResults.containsKey(sourceMatchNum)) {
-          return needWinner 
-              ? _matchResults[sourceMatchNum]!['winner'] ?? 'TBD'
-              : _matchResults[sourceMatchNum]!['loser'] ?? 'TBD';
+        if (sourceMatchNum != null) {
+          return {
+            'sourceMatch': sourceMatchNum,
+            'needWinner': needWinner,
+          };
         }
-        
-        return team['displayName'] ?? team['name'] ?? 'TBD';
+      }
+    }
+    
+    // If it's a string that looks like a placeholder
+    if (team is String) {
+      // Check for "Winner Match X" or "Loser Match X" pattern
+      final winnerRegex = RegExp(r'Winner\s+Match\s+(\d+)', caseSensitive: false);
+      final loserRegex = RegExp(r'Loser\s+Match\s+(\d+)', caseSensitive: false);
+      
+      var match = winnerRegex.firstMatch(team);
+      if (match != null) {
+        int sourceMatchNum = int.parse(match.group(1)!);
+        return {
+          'sourceMatch': sourceMatchNum,
+          'needWinner': true,
+        };
       }
       
+      match = loserRegex.firstMatch(team);
+      if (match != null) {
+        int sourceMatchNum = int.parse(match.group(1)!);
+        return {
+          'sourceMatch': sourceMatchNum,
+          'needWinner': false,
+        };
+      }
+    }
+    
+    return null;
+  }
+
+  String _getPlaceholderText(int sourceMatchNum, bool needWinner) {
+    return needWinner 
+        ? 'Winner of Match $sourceMatchNum'
+        : 'Loser of Match $sourceMatchNum';
+  }
+
+  // Resolve any team reference to its actual name
+  Future<String> _resolveTeamName(dynamic team) async {
+    if (team == null) return 'TBD';
+    
+    // First, try to extract placeholder info
+    final placeholderInfo = _extractPlaceholderInfo(team);
+    if (placeholderInfo != null) {
+      int sourceMatchNum = placeholderInfo['sourceMatch'];
+      bool needWinner = placeholderInfo['needWinner'];
+      
+      // Check if the source match has been processed and has a result
+      if (_matchResults.containsKey(sourceMatchNum)) {
+        String result = needWinner 
+            ? _matchResults[sourceMatchNum]!['winner'] ?? ''
+            : _matchResults[sourceMatchNum]!['loser'] ?? '';
+        
+        // If we have a real result (not a placeholder), return it
+        if (result.isNotEmpty && 
+            !result.contains('Winner') && 
+            !result.contains('Loser') &&
+            result != 'TBD') {
+          return result;
+        }
+      }
+      
+      // Otherwise return the descriptive placeholder text
+      return _getPlaceholderText(sourceMatchNum, needWinner);
+    }
+    
+    // If it's a map with direct name
+    if (team is Map<String, dynamic>) {
       // If it has an ID
       if (team.containsKey('id') && team['id'] != null) {
         String id = team['id'].toString();
@@ -236,33 +313,52 @@ class _TournamentOfficialBracketDialogState
       int sourceMatchNum = int.parse(match.group(1)!);
       bool needWinner = match.group(2) == 'winner';
       if (_matchResults.containsKey(sourceMatchNum)) {
-        return needWinner 
-            ? _matchResults[sourceMatchNum]!['winner'] ?? id
-            : _matchResults[sourceMatchNum]!['loser'] ?? id;
+        String result = needWinner 
+            ? _matchResults[sourceMatchNum]!['winner'] ?? ''
+            : _matchResults[sourceMatchNum]!['loser'] ?? '';
+        
+        if (result.isNotEmpty && 
+            !result.contains('Winner') && 
+            !result.contains('Loser') &&
+            result != 'TBD') {
+          return result;
+        }
       }
-      return id;
+      return _getPlaceholderText(sourceMatchNum, needWinner);
     }
     
     // Check if it's a placeholder string like "Winner Match 1"
-    final winnerRegex = RegExp(r'Winner Match (\d+)', caseSensitive: false);
-    final loserRegex = RegExp(r'Loser Match (\d+)', caseSensitive: false);
+    final winnerRegex = RegExp(r'Winner\s+Match\s+(\d+)', caseSensitive: false);
+    final loserRegex = RegExp(r'Loser\s+Match\s+(\d+)', caseSensitive: false);
     
     var stringMatch = winnerRegex.firstMatch(id);
     if (stringMatch != null) {
       int sourceMatchNum = int.parse(stringMatch.group(1)!);
       if (_matchResults.containsKey(sourceMatchNum)) {
-        return _matchResults[sourceMatchNum]!['winner'] ?? id;
+        String result = _matchResults[sourceMatchNum]!['winner'] ?? '';
+        if (result.isNotEmpty && 
+            !result.contains('Winner') && 
+            !result.contains('Loser') &&
+            result != 'TBD') {
+          return result;
+        }
       }
-      return id;
+      return _getPlaceholderText(sourceMatchNum, true);
     }
     
     stringMatch = loserRegex.firstMatch(id);
     if (stringMatch != null) {
       int sourceMatchNum = int.parse(stringMatch.group(1)!);
       if (_matchResults.containsKey(sourceMatchNum)) {
-        return _matchResults[sourceMatchNum]!['loser'] ?? id;
+        String result = _matchResults[sourceMatchNum]!['loser'] ?? '';
+        if (result.isNotEmpty && 
+            !result.contains('Winner') && 
+            !result.contains('Loser') &&
+            result != 'TBD') {
+          return result;
+        }
       }
-      return id;
+      return _getPlaceholderText(sourceMatchNum, false);
     }
     
     // Real participant ID
@@ -302,7 +398,11 @@ class _TournamentOfficialBracketDialogState
     }
     
     // If winner is still a placeholder, try from scores
-    if (winnerName == 'TBD' || winnerName.contains('Winner') || winnerName.contains('Loser')) {
+    if (winnerName == 'TBD' || 
+        winnerName.contains('Winner') || 
+        winnerName.contains('Loser') ||
+        winnerName.startsWith('Winner of Match') ||
+        winnerName.startsWith('Loser of Match')) {
       final scores = match['scores'] as Map<String, dynamic>?;
       if (scores != null && scores.isNotEmpty) {
         String? winnerKey;
@@ -328,7 +428,11 @@ class _TournamentOfficialBracketDialogState
       loserName = await _resolveTeamName(match['loser']);
     }
     
-    if (loserName == 'TBD' || loserName.contains('Winner') || loserName.contains('Loser')) {
+    if (loserName == 'TBD' || 
+        loserName.contains('Winner') || 
+        loserName.contains('Loser') ||
+        loserName.startsWith('Winner of Match') ||
+        loserName.startsWith('Loser of Match')) {
       // Loser is the other team
       if (winnerName == results['team1']) {
         loserName = results['team2']!;
@@ -359,7 +463,6 @@ class _TournamentOfficialBracketDialogState
     _matchResults[matchNum] = results;
     
     // Debug output
-    print('Match $matchNum: team1=${results['team1']}, team2=${results['team2']}, winner=${results['winner']}, loser=${results['loser']}');
   }
 
   String _cleanTeamName(String name) {
@@ -558,7 +661,7 @@ class _TournamentOfficialBracketDialogState
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.deepPurple, Colors.purpleAccent],
+                  colors: [Color.fromARGB(255, 20, 2, 108), Color.fromARGB(255, 29, 16, 151)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -854,6 +957,14 @@ class _TournamentOfficialBracketDialogState
       team1Name = _matchResults[matchNum]!['team1'] ?? 'TBD';
       team2Name = _matchResults[matchNum]!['team2'] ?? 'TBD';
       winnerName = _matchResults[matchNum]!['winner'] ?? 'TBD';
+    } else {
+      // If match not processed yet, resolve names directly
+      if (match['team1'] != null) {
+        team1Name = await _resolveTeamName(match['team1']);
+      }
+      if (match['team2'] != null) {
+        team2Name = await _resolveTeamName(match['team2']);
+      }
     }
     
     return {
@@ -880,7 +991,10 @@ class _TournamentOfficialBracketDialogState
     String? team2Score = _getTeamScore(match['team2'], match);
 
     final hasWinner = winnerName != 'TBD' && winnerName.isNotEmpty && 
-                      !winnerName.contains('Winner') && !winnerName.contains('Loser');
+                      !winnerName.contains('Winner') && 
+                      !winnerName.contains('Loser') &&
+                      !winnerName.startsWith('Winner of Match') &&
+                      !winnerName.startsWith('Loser of Match');
 
     Color bracketColor = Colors.blue;
     if (bracket == 'winners') {
@@ -1100,18 +1214,24 @@ class _TournamentOfficialBracketDialogState
     required bool isWinner,
     required bool isGrandFinal,
   }) {
+    // Check if this is a placeholder text that should be highlighted
+    final isPlaceholder = label.contains('Winner of Match') || 
+                          label.contains('Loser of Match') ||
+                          (label.contains('Winner') && label.contains('Match')) ||
+                          (label.contains('Loser') && label.contains('Match'));
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: isWinner
             ? (isGrandFinal ? Colors.amber.shade50 : Colors.green.shade50)
-            : Colors.grey.shade50,
+            : (isPlaceholder ? Colors.blue.shade50 : Colors.grey.shade50),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isWinner
               ? (isGrandFinal ? Colors.amber.shade200 : Colors.green.shade200)
-              : Colors.grey.shade200,
+              : (isPlaceholder ? Colors.blue.shade200 : Colors.grey.shade200),
           width: isWinner ? 1.5 : 1,
         ),
       ),
@@ -1126,17 +1246,27 @@ class _TournamentOfficialBracketDialogState
                 color: isGrandFinal ? Colors.amber.shade700 : Colors.green.shade700,
               ),
             ),
+          if (isPlaceholder && !isWinner)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(
+                Icons.schedule,
+                size: 10,
+                color: Colors.blue.shade600,
+              ),
+            ),
           Expanded(
             child: Text(
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: isWinner ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isWinner ? FontWeight.bold : (isPlaceholder ? FontWeight.w500 : FontWeight.normal),
                 color: isWinner
                     ? (isGrandFinal ? Colors.amber.shade700 : Colors.green.shade700)
-                    : Colors.black87,
+                    : (isPlaceholder ? Colors.blue.shade700 : Colors.black87),
+                fontStyle: isPlaceholder && !isWinner ? FontStyle.italic : FontStyle.normal,
               ),
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
