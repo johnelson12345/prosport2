@@ -5,6 +5,7 @@ import 'package:tabulation_systemv7/screens_roles/tournament_official/tournament
 import 'package:tabulation_systemv7/screens_roles/admin_screens/admin.dart';
 import 'package:tabulation_systemv7/screens_roles/viewer/main_viewer.dart';
 import 'package:tabulation_systemv7/services/auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'signup.dart';
 
 class LoginPage extends StatefulWidget {
@@ -19,7 +20,242 @@ class LoginPageState extends State<LoginPage> {
   final TextEditingController passwordController = TextEditingController();
   final AuthService _authService = AuthService();
   bool isLoading = false;
-  bool _obscurePassword = true; // Controls password visibility
+  bool _obscurePassword = true;
+  bool _isCheckingLogin = true;
+  String? _existingUserId;
+  String? _existingUserRole;
+  String? _existingUserEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAutoLogin();
+  }
+
+  // Check for existing session
+  Future<void> _checkAutoLogin() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      
+      // Check if user is already logged in
+      String? userId = prefs.getString('user_id');
+      String? userRole = prefs.getString('user_role');
+      String? userEmail = prefs.getString('user_email');
+      
+      if (userId != null && userRole != null) {
+        // Verify if user still exists in Firestore
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+        
+        if (userDoc.exists) {
+          // Store existing session info
+          _existingUserId = userId;
+          _existingUserRole = userRole;
+          _existingUserEmail = userEmail;
+          
+          if (mounted) {
+            setState(() {
+              _isCheckingLogin = false;
+            });
+            // Show dialog to ask user what to do
+            _showExistingSessionDialog();
+          }
+          return;
+        } else {
+          // User no longer exists, clear stored data
+          await _clearUserSession();
+        }
+      }
+    } catch (e) {
+      print('Auto-login error: $e');
+    }
+    
+    if (mounted) {
+      setState(() {
+        _isCheckingLogin = false;
+      });
+    }
+  }
+  
+  // Show dialog for existing session
+  Future<void> _showExistingSessionDialog() async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false, // User must tap a button
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.account_circle,
+                color: Colors.deepOrange.shade700,
+                size: 32,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Welcome Back!',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'We found an existing session on this device.',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.deepOrange.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Session Details:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.email, size: 16, color: Colors.deepOrange),
+                        const SizedBox(width: 8),
+                        Text(
+                          _existingUserEmail ?? 'User',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.verified_user, size: 16, color: Colors.deepOrange),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Role: ${_existingUserRole ?? 'Viewer'}',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Would you like to continue with this session or start a new one?',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close dialog
+                await _clearUserSession(); // Clear existing session
+                // User can now login with new credentials
+              },
+              child: const Text(
+                'Start New Session',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                _continueWithExistingSession(); // Continue with existing session
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Continue',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  // Continue with existing session
+  Future<void> _continueWithExistingSession() async {
+    if (_existingUserId != null && _existingUserRole != null) {
+      Widget nextScreen = _getScreenByRole(_existingUserRole!);
+      
+      // Update last login timestamp if you have that field
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_existingUserId)
+            .update({
+          'lastLogin': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        print('Error updating last login: $e');
+      }
+      
+      if (!mounted) return;
+      
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => nextScreen),
+      );
+    }
+  }
+  
+  // Helper method to get screen by role
+  Widget _getScreenByRole(String role) {
+    final normalizedRole = role.trim().toLowerCase();
+    
+    switch (normalizedRole) {
+      case 'admin':
+        return const AdminScreen();
+      case 'tournament official':
+        return const TournamentMain();
+      case 'tabulator':
+        return const TabulatorMain();
+      case 'viewer':
+      default:
+        return const ViewerMain();
+    }
+  }
+  
+  // Save user session after successful login
+  Future<void> _saveUserSession(String userId, String role, String email) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_id', userId);
+    await prefs.setString('user_role', role);
+    await prefs.setString('user_email', email);
+  }
+  
+  // Clear user session
+  Future<void> _clearUserSession() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_id');
+    await prefs.remove('user_role');
+    await prefs.remove('user_email');
+  }
 
   void _login() async {
     final email = emailController.text.trim();
@@ -41,30 +277,12 @@ class LoginPageState extends State<LoginPage> {
           .get();
 
       if (userDoc.exists) {
-        final role = userDoc['role'];
-        Widget nextScreen;
-
-        // Normalize role to lowercase for consistent comparison
-        final normalizedRole = (role ?? 'Viewer').trim().toLowerCase();
-
-        switch (normalizedRole) {
-          case 'admin':
-            nextScreen = const AdminScreen();
-            break;
-          case 'tournament official':
-            nextScreen = const TournamentMain();
-            break;
-          case 'viewer':
-            nextScreen = const ViewerMain();
-            break;
-          case 'tabulator':
-            nextScreen = const TabulatorMain();
-            break;
-          default:
-            _showError("Unrecognized user role: $role");
-            setState(() => isLoading = false);
-            return;
-        }
+        final role = userDoc['role'] ?? 'Viewer';
+        final userEmail = user.email ?? email;
+        Widget nextScreen = _getScreenByRole(role);
+        
+        // Save user session for auto-login
+        await _saveUserSession(user.uid, role, userEmail);
 
         if (!mounted) return;
         Navigator.pushReplacement(
@@ -80,6 +298,22 @@ class LoginPageState extends State<LoginPage> {
 
     if (!mounted) return;
     setState(() => isLoading = false);
+  }
+
+  void _loginAsGuest() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const ViewerMain()),
+    );
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Continuing as Guest'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -109,6 +343,41 @@ class LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Show loading screen while checking auto-login
+    if (_isCheckingLogin) {
+      return Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.blue.shade900,
+                Colors.blue.shade700,
+                Colors.orange.shade600,
+                Colors.deepOrange.shade700,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'Checking existing session...',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -139,15 +408,14 @@ class LoginPageState extends State<LoginPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Logo and Title in a Row
+                      // Logo and Title
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Image.asset(
                             'assets/icon2.png',
-                            height:
-                                80, // Slightly reduced for better row alignment
+                            height: 80,
                             width: 80,
                           ),
                           const SizedBox(width: 16),
@@ -155,7 +423,7 @@ class LoginPageState extends State<LoginPage> {
                             child: Text(
                               'UA SPORTS DEVELOPMENT UNIT',
                               style: TextStyle(
-                                fontSize: 22, // Slightly reduced to fit better
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.deepOrange.shade800,
                               ),
@@ -165,7 +433,7 @@ class LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Rest of your form fields remain exactly the same
+                      // Email Field
                       TextField(
                         controller: emailController,
                         decoration: InputDecoration(
@@ -186,12 +454,10 @@ class LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 20),
 
-                      // ... [keep all your other existing form fields and buttons] ...
-
+                      // Password Field
                       TextField(
                         controller: passwordController,
-                        obscureText:
-                            _obscurePassword, // Use the state variable here
+                        obscureText: _obscurePassword,
                         decoration: InputDecoration(
                           prefixIcon:
                               const Icon(Icons.lock, color: Colors.deepOrange),
@@ -207,7 +473,6 @@ class LoginPageState extends State<LoginPage> {
                                 const BorderSide(color: Colors.deepOrange),
                           ),
                           suffixIcon: IconButton(
-                            // Add this icon button
                             icon: Icon(
                               _obscurePassword
                                   ? Icons.visibility_off
@@ -216,8 +481,7 @@ class LoginPageState extends State<LoginPage> {
                             ),
                             onPressed: () {
                               setState(() {
-                                _obscurePassword =
-                                    !_obscurePassword; // Toggle visibility
+                                _obscurePassword = !_obscurePassword;
                               });
                             },
                           ),
@@ -225,6 +489,7 @@ class LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 24),
 
+                      // Login Button
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -285,31 +550,19 @@ class LoginPageState extends State<LoginPage> {
                                     final user =
                                         await _authService.signInWithGoogle();
                                     if (user != null) {
-                                      // Get user role from Firestore
                                       final role = await _authService
                                           .getUserRole(user.uid);
-
+                                          
                                       if (!mounted) return;
-
-                                      Widget nextScreen;
-                                      final normalizedRole = (role ?? 'Viewer')
-                                          .trim()
-                                          .toLowerCase();
-                                      switch (normalizedRole) {
-                                        case 'admin':
-                                          nextScreen = const AdminScreen();
-                                          break;
-                                        case 'tournament official':
-                                          nextScreen = const TournamentMain();
-                                          break;
-                                        case 'tabulator':
-                                          nextScreen = const TabulatorMain();
-                                          break;
-                                        case 'viewer':
-                                        default:
-                                          nextScreen = const ViewerMain();
-                                          break;
-                                      }
+                                      
+                                      Widget nextScreen = _getScreenByRole(role ?? 'Viewer');
+                                      
+                                      // Save user session
+                                      await _saveUserSession(
+                                        user.uid, 
+                                        role ?? 'Viewer', 
+                                        user.email ?? 'No email'
+                                      );
 
                                       Navigator.pushReplacement(
                                         context,
@@ -324,6 +577,62 @@ class LoginPageState extends State<LoginPage> {
                                   if (!mounted) return;
                                   setState(() => isLoading = false);
                                 },
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Divider with "OR"
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Divider(
+                              color: Colors.grey.shade400,
+                              thickness: 1,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              'OR',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Divider(
+                              color: Colors.grey.shade400,
+                              thickness: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Guest Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.visibility_off_outlined),
+                          label: const Text(
+                            'Continue as Guest',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.deepOrange,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            side: const BorderSide(color: Colors.deepOrange),
+                          ),
+                          onPressed: _loginAsGuest,
                         ),
                       ),
 
