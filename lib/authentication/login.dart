@@ -383,8 +383,8 @@ class LoginPageState extends State<LoginPage> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              Colors.blue.shade900,
-              Colors.blue.shade700,
+                 Colors.blue.shade900,
+                Colors.blue.shade700,
               Colors.orange.shade600,
               Colors.deepOrange.shade700,
             ],
@@ -495,7 +495,7 @@ class LoginPageState extends State<LoginPage> {
                         child: ElevatedButton(
                           onPressed: isLoading ? null : _login,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepOrange,
+                            backgroundColor: const Color.fromARGB(255, 9, 82, 192),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -535,7 +535,7 @@ class LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
+                             backgroundColor: const Color.fromARGB(255, 249, 100, 0),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),

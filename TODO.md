@@ -1,12 +1,9 @@
-# Logo and Title Update Plan for Web
+# Task: Copy non-stretching card UI from login.dart to signup.dart
 
-## Steps:
-- [x] 1. Update web/index.html (title, meta description, apple title)
-- [x] 2. Update web/manifest.json (name, short_name, description)
-- [x] 3. Update pubspec.yaml (description)
-- [x] 4. Run `flutter pub get && flutter pub run flutter_launcher_icons:main` to generate custom icons for all platforms including web/favicon.png and web/icons/
-- [x] 5. Run `flutter build web --release` to build with updates
-- [ ] 6. Test by opening build/web/index.html or deploying
-
-All steps complete. Web app now uses custom name "Tabulation System" and logo from assets/icon.png (generated via flutter_launcher_icons).
+## TODO Steps:
+- [x] 1. Analyze files and create detailed edit plan (completed)
+- [ ] 2. Create TODO.md with breakdown (completed)
+- [x] 3. Edit lib/authentication/signup.dart: Wrap Card in ConstrainedBox(maxWidth: 500) ✓\n- [x] 4. Verify edit with hot reload/test ✓
+- [ ] 5. Update TODO.md with completion
+- [ ] 6. Attempt task completion
 
