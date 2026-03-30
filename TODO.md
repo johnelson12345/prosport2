@@ -1,9 +1,7 @@
-# Task: Copy non-stretching card UI from login.dart to signup.dart
+# Task: Add No. column to schedules.dart table
 
-## TODO Steps:
-- [x] 1. Analyze files and create detailed edit plan (completed)
-- [ ] 2. Create TODO.md with breakdown (completed)
-- [x] 3. Edit lib/authentication/signup.dart: Wrap Card in ConstrainedBox(maxWidth: 500) ✓\n- [x] 4. Verify edit with hot reload/test ✓
-- [ ] 5. Update TODO.md with completion
-- [ ] 6. Attempt task completion
-
+## Steps:
+- [x] 1. Create TODO.md with plan breakdown
+- [x] 2. Edit SchedulesDataSource.getRow() to add row number DataCell
+- [x] 3. Edit PaginatedDataTable.columns to add # DataColumn
+- [ ] 4. Verify changes and complete task

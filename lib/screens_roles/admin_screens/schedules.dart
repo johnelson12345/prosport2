@@ -55,6 +55,7 @@ class SchedulesDataSource extends DataTableSource {
 
     return DataRow(
       cells: [
+        DataCell(Text('${index + 1}')),
         DataCell(Text(formattedStartTime)),
         DataCell(Text(formattedEndTime)),
         DataCell(Text(occupiedText)),
@@ -697,6 +698,7 @@ class _SchedulesManagementScreenState extends State<SchedulesManagementScreen>
                       showCheckboxColumn: false,
                       columnSpacing: 200,
                       columns: const [
+                        DataColumn(label: Text('No.')),
                         DataColumn(label: Text('Start Time')),
                         DataColumn(label: Text('End Time')),
                         DataColumn(label: Text('Occupied')),
