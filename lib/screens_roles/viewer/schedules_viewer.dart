@@ -88,13 +88,13 @@ class _MatchDetailPopup extends StatelessWidget {
                         end: Alignment.bottomRight,
                         colors: [
                           sportColor,
-                          sportColor.withOpacity(0.9),
+                          sportColor.withValues(alpha: 0.9),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: sportColor.withOpacity(0.4),
+                          color: sportColor.withValues(alpha: 0.4),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -109,10 +109,10 @@ class _MatchDetailPopup extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
+                              color: Colors.white.withValues(alpha: 0.1),
                               border: Border(
                                 bottom: BorderSide(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withValues(alpha: 0.2),
                                 ),
                               ),
                             ),
@@ -121,7 +121,7 @@ class _MatchDetailPopup extends StatelessWidget {
                                 Container(
                                   width: 10,
                                   height: 10,
-                                  decoration: BoxDecoration(
+                                  decoration: const BoxDecoration(
                                     color: Colors.white,
                                     shape: BoxShape.circle,
                                   ),
@@ -198,7 +198,7 @@ class _MatchDetailPopup extends StatelessWidget {
                                 ],
                                 const SizedBox(height: 20),
                                 // Edit Button
-                                SizedBox(
+                                const SizedBox(
                                   width: double.infinity,
                                   // child: ElevatedButton.icon(
                                   //   onPressed: () {
@@ -271,11 +271,11 @@ class SchedulesViewer extends StatefulWidget {
   });
 
   @override
-  _TournamentCalendarScreenState createState() =>
-      _TournamentCalendarScreenState();
+  TournamentCalendarScreenState createState() =>
+      TournamentCalendarScreenState();
 }
 
-class _TournamentCalendarScreenState extends State<SchedulesViewer>
+class TournamentCalendarScreenState extends State<SchedulesViewer>
     with SingleTickerProviderStateMixin {
   final TeamScheduleService _service = TeamScheduleService();
   final SportsService _sportsService = SportsService();
@@ -290,18 +290,16 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
   bool _isPrinting = false;
   String _searchQuery = '';
   String _selectedVenue = 'All Venues';
-  Set<String> _selectedSports = {};
-  Set<String> _selectedSportsFilter = {};
+  final Set<String> _selectedSports = {};
+  final Set<String> _selectedSportsFilter = {};
   Set<String> _selectedSportsColumns = {};
   List<String> _availableSports = [];
   bool _showAllDates = false;
   String _selectedView = 'grid';
 
   // Cache for team names
-  final Map<String, String> _teamNameCache = {};
   Set<String> _availableVenues = {};
   List<Map<String, dynamic>>? _cachedSchedules;
-  List<String>? _cachedSports;
 
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _verticalScrollController = ScrollController();
@@ -318,8 +316,6 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
   final Map<String, Map<String, dynamic>> _eventMetadataCache = {};
 
   // Hover states for enhanced UI
-  int _hoveredColumn = -1;
-  int _hoveredRow = -1;
   
   // Track active popup
   OverlayEntry? _activePopup;
@@ -386,7 +382,9 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
             );
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        // Parsing failed, dateTime remains null
+      }
     }
 
     _dateCache[dateTimeStr] = dateTime;
@@ -472,7 +470,7 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
     
     bool isWinner = team['name']?.toString().contains('Winner') ?? 
                     team['displayName']?.toString().contains('Winner') ?? 
-                    team['type'] == 'winner' ?? true;
+                    team['type'] == 'winner';
     
     if (sourceMatchNum != null) {
       if (isWinner) {
@@ -708,7 +706,7 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
       : 'Time TBD';
   final eventId = event['id'] as String? ?? '';
 
-  Timer? _hoverTimer;
+  Timer? hoverTimer;
 
   // Declare functions first
   void _hidePopup() {
@@ -748,14 +746,14 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
   }
 
   void _startHoverTimer(BuildContext context, Offset position) {
-    _hoverTimer?.cancel();
-    _hoverTimer = Timer(const Duration(milliseconds: 300), () {
+    hoverTimer?.cancel();
+    hoverTimer = Timer(const Duration(milliseconds: 300), () {
       _showPopup(context, position);
     });
   }
 
   void _cancelHoverTimer() {
-    _hoverTimer?.cancel();
+    hoverTimer?.cancel();
     _hidePopup();
   }
 
@@ -840,18 +838,17 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
                                 Flexible(
                                   child: Row(
                                     children: [
-                                      if (round != null && matchNumber != null)
-                                        Expanded(
-                                          child: Text(
-                                            'R$round • M$matchNumber',
-                                            style: TextStyle(
-                                              fontSize: 7,
-                                              color: Colors.grey[600],
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                      Expanded(
+                                        child: Text(
+                                          'R$round • M$matchNumber',
+                                          style: TextStyle(
+                                            fontSize: 7,
+                                            color: Colors.grey[600],
                                           ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
+                                      ),
                                       const SizedBox(width: 4),
                                       if (startTime != null && endTime != null)
                                         Flexible(
@@ -861,7 +858,7 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
                                               vertical: 1,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: sportColor.withOpacity(0.1),
+                                              color: sportColor.withValues(alpha: 0.1),
                                               borderRadius: BorderRadius.circular(4),
                                             ),
                                             child: Text(
@@ -999,30 +996,6 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
 }
 
  
-  Widget _buildOptimizedInfoChip(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 6, color: color),
-          const SizedBox(width: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 6,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildViewToggle() {
     return Container(
@@ -1928,9 +1901,7 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
 
   Widget _buildModernEventCard(
     Map<String, dynamic> event,
-    List<Map<String, dynamic>> allSchedules, {
-    bool isCompact = false,
-  }) {
+    List<Map<String, dynamic>> allSchedules) {
     final metadata = _getEventMetadata(event);
     final matchText = metadata['matchText'];
     final startTime = metadata['startTime'];
@@ -1945,7 +1916,6 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
     final matchNumber = event['matchNumber'] as int?;
     final round = event['round'] as int?;
     final sportColor = _getSportColor(sportName);
-    final eventId = event['id'] as String? ?? '';
 
     bool _isExpanded = false;
 
@@ -2752,471 +2722,12 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
     }
   }
 
-  Future<void> _showCreateAnnouncementDialog() async {
-    final TextEditingController _announcementController =
-        TextEditingController();
-    String selectedType = 'General Update';
-    final List<String> announcementTypes = [
-      'General Update',
-      'Schedule Change',
-      'Venue Change',
-      'Weather Advisory',
-      'Important Notice',
-      'Emergency',
-    ];
 
-    return showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Create Announcement'),
-              content: Container(
-                width: 500,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Announcement Type',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: selectedType,
-                        isExpanded: true,
-                        underline: const SizedBox(),
-                        items: announcementTypes.map((String type) {
-                          return DropdownMenuItem<String>(
-                            value: type,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _getAnnouncementIcon(type),
-                                  size: 18,
-                                  color: _getAnnouncementColor(type),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(type),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          if (newValue != null) {
-                            setDialogState(() {
-                              selectedType = newValue;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Title',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _announcementController,
-                      maxLines: 2,
-                      maxLength: 200,
-                      decoration: InputDecoration(
-                        hintText: 'Enter your announcement here...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (_announcementController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Please enter an announcement'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                      return;
-                    }
 
-                    final announcement = {
-                      'id':
-                          'announcement_${DateTime.now().millisecondsSinceEpoch}',
-                      'type': selectedType,
-                      'message': _announcementController.text.trim(),
-                      'timestamp': FieldValue.serverTimestamp(),
-                      'date': _displayDateFormat.format(DateTime.now()),
-                      'time': _timeFormat.format(DateTime.now()),
-                      'isRead': false,
-                      'priority':
-                          selectedType == 'Emergency' ? 'high' : 'normal',
-                    };
 
-                    try {
-                      await _announcementService
-                          .createAnnouncement(announcement);
 
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content:
-                                const Text('Announcement created successfully'),
-                            backgroundColor: Colors.green,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Error creating announcement: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Post Announcement'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 
-  IconData _getAnnouncementIcon(String type) {
-    switch (type) {
-      case 'Schedule Change':
-        return Icons.update;
-      case 'Venue Change':
-        return Icons.location_on;
-      case 'Weather Advisory':
-        return Icons.wb_sunny;
-      case 'Important Notice':
-        return Icons.priority_high;
-      case 'Emergency':
-        return Icons.warning;
-      default:
-        return Icons.campaign;
-    }
-  }
 
-  Color _getAnnouncementColor(String type) {
-    switch (type) {
-      case 'Schedule Change':
-        return Colors.blue;
-      case 'Venue Change':
-        return Colors.orange;
-      case 'Weather Advisory':
-        return Colors.amber;
-      case 'Important Notice':
-        return Colors.purple;
-      case 'Emergency':
-        return Colors.red;
-      default:
-        return Colors.green;
-    }
-  }
-
-  void _showManageAnnouncementsBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.9,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) => Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Row(
-                children: [
-                  Icon(Icons.campaign, color: Colors.blue[700], size: 28),
-                  const SizedBox(width: 12),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Manage Announcements',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'View, edit, and delete announcements',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: _announcementService.getLatestAnnouncements(limit: 50),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.error, color: Colors.red[400], size: 48),
-                            const SizedBox(height: 8),
-                            Text('Error loading announcements: ${snapshot.error}'),
-                            TextButton(
-                              onPressed: () => setState(() {}),
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.campaign_outlined, size: 64, color: Colors.grey),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No announcements yet',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Create your first announcement using the Announce button',
-                              style: TextStyle(color: Colors.grey[500]),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    final announcements = snapshot.data!;
-                    return ListView.builder(
-                      controller: scrollController,
-                      itemCount: announcements.length,
-                      itemBuilder: (context, index) {
-                        final announcement = announcements[index];
-                        final timestamp = announcement['timestamp'] as Timestamp?;
-                        final timeAgo = timestamp != null 
-                            ? _formatTimeAgo(timestamp.toDate()) 
-                            : 'Unknown';
-
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            leading: CircleAvatar(
-                              backgroundColor: _getAnnouncementColor(announcement['type'] ?? 'General Update'),
-                              child: Icon(
-                                _getAnnouncementIcon(announcement['type'] ?? 'General Update'),
-                                color: Colors.white,
-                              ),
-                            ),
-                            title: Text(
-                              announcement['message'] ?? '',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(announcement['type'] ?? 'General Update'),
-                                Text(timeAgo, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                              ],
-                            ),
-                            trailing: PopupMenuButton<String>(
-                              icon: const Icon(Icons.more_vert),
-                              onSelected: (value) {
-                                if (value == 'edit') {
-                                  _showEditAnnouncementDialog(context, announcement);
-                                } else if (value == 'delete') {
-                                  _showDeleteConfirmationDialog(context, announcement['id']);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit), SizedBox(width: 8), Text('Edit')])),
-                                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red))])),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
-
-  void _showEditAnnouncementDialog(BuildContext context, Map<String, dynamic> announcement) {
-    final controller = TextEditingController(text: announcement['message'] ?? '');
-    final type = announcement['type'] ?? 'General Update';
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Announcement'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: type,
-              decoration: const InputDecoration(labelText: 'Type'),
-              items: ['General Update', 'Schedule Change', 'Venue Change', 'Weather Advisory', 'Important Notice', 'Emergency']
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                  .toList(),
-              onChanged: null,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Message',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await _announcementService.updateAnnouncement(
-                  announcement['id'],
-                  {'message': controller.text.trim(), 'type': type},
-                );
-                if (context.mounted) Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Announcement updated')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
-              }
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteConfirmationDialog(BuildContext context, String id) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Announcement'),
-        content: const Text('Are you sure you want to delete this announcement? This action cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              try {
-                await _announcementService.deleteAnnouncement(id);
-                if (context.mounted) Navigator.pop(context);
-                if (context.mounted) Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Announcement deleted')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
-              }
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -3421,23 +2932,19 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
                 _cachedSchedules = schedules;
                 
                 _availableVenues = schedules
-                    .where((s) => s != null)
                     .map((s) => s['venue'] as String? ?? 'TBD')
                     .where((v) => v.isNotEmpty)
                     .toSet();
 
                 final scheduleSports = schedules
-                    .where((s) => s != null)
                     .map((s) =>
                         s['sport'] as String? ??
                         s['sportName'] as String? ??
                         'Unknown Sport')
-                    .where((sport) => sport != null && sport.isNotEmpty)
                     .toSet();
 
                 final allSports = sportsSnapshot.docs
                     .map((doc) => doc['name'] as String? ?? 'Unknown Sport')
-                    .where((sport) => sport != null && sport.isNotEmpty)
                     .toSet();
 
                 final sports = (scheduleSports.union(allSports)).toList()
@@ -3456,8 +2963,8 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
                 }
 
                 final daySchedules = _showAllDates
-                    ? schedules.where((s) => s != null).toList()
-                    : schedules.where((s) => s != null).where((s) {
+                    ? schedules.toList()
+                    : schedules.where((s) {
                         final dateTimeStr = s['dateTime'] as String? ?? '';
                         final dateTime = _parseDateTime(dateTimeStr);
                         return dateTime != null &&
@@ -3467,7 +2974,6 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
                       }).toList();
 
                 final filteredSchedules = daySchedules.where((schedule) {
-                  if (schedule == null) return false;
 
                   if (_searchQuery.isNotEmpty) {
                     final teams = schedule['teams'] as List<dynamic>? ?? [];

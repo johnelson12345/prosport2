@@ -861,11 +861,11 @@ class _TournamentCalendarScreenState extends State<SchedulesAdmin>
                                               vertical: 1,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: sportColor.withOpacity(0.1),
+                                              color: sportColor.withValues(alpha:0.1),
                                               borderRadius: BorderRadius.circular(4),
                                             ),
                                             child: Text(
-                                              '${_formatTime(startTime)}',
+                                              _formatTime(startTime),
                                               style: TextStyle(
                                                 fontSize: 7,
                                                 color: sportColor,
@@ -969,7 +969,7 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
     constraints: const BoxConstraints(maxWidth: 100, maxHeight: 14),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(6),
     ),
     child: Row(
@@ -1079,7 +1079,7 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
