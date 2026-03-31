@@ -2560,7 +2560,7 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: categoryColor.withOpacity(0.1),
+                                  color: categoryColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -2572,21 +2572,25 @@ class _BracketStyleTournamentCard extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  categoryName,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ),
+       Flexible(
+         child: Container(
+           padding: const EdgeInsets.symmetric(
+             horizontal: 6, vertical: 2),
+           decoration: BoxDecoration(
+             color: Colors.grey.shade100,
+             borderRadius: BorderRadius.circular(8),
+           ),
+           child: Text(
+             categoryName,
+             style: const TextStyle(
+               fontSize: 10,
+               color: Colors.grey,
+               overflow: TextOverflow.ellipsis,
+             ),
+             maxLines: 1,
+           ),
+         ),
+       ),
                             ],
                           ),
                         ],

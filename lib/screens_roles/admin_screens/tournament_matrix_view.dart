@@ -966,27 +966,31 @@ class _TournamentCalendarScreenState extends State<SchedulesAdmin>
 
 Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-    constraints: const BoxConstraints(maxWidth: 100),
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+    constraints: const BoxConstraints(maxWidth: 100, maxHeight: 14),
     decoration: BoxDecoration(
       color: color.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(6),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 8, color: color),
+        Icon(icon, size: 6, color: color),
         const SizedBox(width: 2),
         Flexible(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 7,
-              fontWeight: FontWeight.w500,
-              color: color,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 6.5,
+                fontWeight: FontWeight.w500,
+                color: color,
+                height: 1.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -2143,18 +2147,19 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
                               ),
                             ),
                             if (gender.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: gender == 'Men'
-                                      ? Colors.blue.withOpacity(0.1)
-                                      : gender == 'Women'
-                                          ? Colors.pink.withOpacity(0.1)
-                                          : Colors.green.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: gender == 'Men'
+                                        ? Colors.blue.withValues(alpha: 0.1)
+                                        : gender == 'Women'
+                                            ? Colors.pink.withValues(alpha: 0.1)
+                                            : Colors.green.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
                                   gender,
@@ -2168,6 +2173,7 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
                                             : Colors.green,
                                   ),
                                 ),
+                              ),
                               ),
                           ],
                         ),
