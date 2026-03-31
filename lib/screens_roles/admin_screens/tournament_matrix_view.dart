@@ -1255,12 +1255,12 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
                                       gradient: LinearGradient(
                                         colors: [
                                           sportColor,
-                                          sportColor.withOpacity(0.7),
+                                          sportColor.withValues(alpha: 0.7),
                                         ],
                                       ),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: Icon(
+                                    child: const Icon(
                                       Icons.sports,
                                       size: 18,
                                       color: Colors.white,
@@ -1413,7 +1413,7 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             spreadRadius: 1,
             offset: const Offset(0, 2),
@@ -1497,7 +1497,7 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -1523,7 +1523,7 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
   }
 
   Widget _buildOptimizedTimeHeader() {
-    return Container(
+    return SizedBox(
       width: 80,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1570,12 +1570,12 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: Colors.grey.withOpacity(0.1),
+                  color: Colors.grey.withValues(alpha: 0.1),
                   width: 0.5,
                 ),
               ),
               color: isEvenRow
-                  ? Colors.grey.withOpacity(0.02)
+                  ? Colors.grey.withValues(alpha: 0.02)
                   : Colors.transparent,
             ),
             child: Row(
@@ -1604,12 +1604,12 @@ Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
                           decoration: BoxDecoration(
                             border: Border(
                               right: BorderSide(
-                                color: Colors.grey.withOpacity(0.1),
+                                color: Colors.grey.withValues(alpha: 0.1),
                                 width: 0.5,
                               ),
                             ),
                             color: isCovered
-                                ? sportColor.withOpacity(0.02)
+                                ? sportColor.withValues(alpha:0.01)
                                 : null,
                           ),
                           child: Stack(

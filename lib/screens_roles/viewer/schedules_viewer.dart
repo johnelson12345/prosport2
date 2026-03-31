@@ -686,7 +686,7 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
     return metadata;
   }
 
- Widget _buildOptimizedGridEventCard(
+  Widget _buildOptimizedGridEventCard(
   Map<String, dynamic> event,
   Color sportColor,
   List<Map<String, dynamic>> allSchedules,
@@ -883,27 +883,27 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
                             ),
                           ),
                           // Edit button - Always visible
-                          // if (widget.isEditable)
-                          //   Container(
-                          //     decoration: BoxDecoration(
-                          //       color: sportColor.withOpacity(0.1),
-                          //       borderRadius: BorderRadius.circular(8),
-                          //     ),
-                          //     child: IconButton(
-                          //       icon: Icon(
-                          //         Icons.edit_calendar,
-                          //         size: 14,
-                          //         color: sportColor,
-                          //       ),
-                          //       onPressed: () =>
-                          //           _editMatchDateTime(context, event, allSchedules),
-                          //       padding: const EdgeInsets.all(4),
-                          //       constraints: const BoxConstraints(
-                          //         minWidth: 24,
-                          //         minHeight: 24,
-                          //       ),
-                          //     ),
-                          //   ),
+                          if (widget.isEditable)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: sportColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: IconButton(
+                                icon: Icon(
+                                  Icons.edit_calendar,
+                                  size: 14,
+                                  color: sportColor,
+                                ),
+                                onPressed: () =>
+                                    _editMatchDateTime(context, event, allSchedules),
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(
+                                  minWidth: 24,
+                                  minHeight: 24,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -966,30 +966,34 @@ class _TournamentCalendarScreenState extends State<SchedulesViewer>
 
 Widget _buildCompactMetaChip(IconData icon, String label, Color color) {
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-    constraints: const BoxConstraints(maxWidth: 100),
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+    constraints: const BoxConstraints(maxWidth: 100, maxHeight: 14),
     decoration: BoxDecoration(
       color: color.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(6),
     ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 8, color: color),
-        const SizedBox(width: 2),
-        Flexible(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 7,
-              fontWeight: FontWeight.w500,
-              color: color,
+    child: FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 6, color: color),
+          const SizedBox(width: 2),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 6.5,
+                fontWeight: FontWeight.w500,
+                color: color,
+                height: 1.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
