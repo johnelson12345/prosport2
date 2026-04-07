@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/admin_dashboard.dart';
+import 'package:tabulation_systemv7/screens_roles/admin_screens/results_rankings_admin.dart';
+import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/reports_analytics.dart';
 import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/results_mngmt.dart';
 import 'package:tabulation_systemv7/screens_roles/tabulation_comittee/tabulator_medal_tally.dart';
 import 'package:tabulation_systemv7/screens_roles/tournament_official/announcements.dart';
@@ -30,6 +32,7 @@ class _TabulatorMainState extends State<TabulatorMain>
     'Dashboard',
     'Results Mngmt',
     'Medal Tally',
+    'Results and Rankings',
     'Reports',
   ];
   List<String> _filteredMenuItems = [];
@@ -183,6 +186,9 @@ class _TabulatorMainState extends State<TabulatorMain>
       case 'Results Mngmt':
         return const ResultsVerification();
       case 'Reports':
+        return const ReportsAnalytics();
+      case 'Results and Rankings':
+        return const ResultsAndRankingsAdminPage();
 
       case 'Medal Tally':
       return const TabulatorMedalTally();
@@ -308,8 +314,11 @@ class _TabulatorMainState extends State<TabulatorMain>
                     case 'Medal Tally':
                       iconData = Icons.workspace_premium;
                       break;
-                      case 'Reports':
+                    case 'Reports':
                       iconData = Icons.report;
+                      break;
+                    case 'Results and Rankings':
+                      iconData = Icons.verified;
                       break;
                     default:
                       iconData = Icons.circle;
@@ -609,6 +618,9 @@ class _TabulatorMainState extends State<TabulatorMain>
                       break;
                     case 'Reports':
                       iconData = Icons.report;
+                      break;
+                    case 'Results and Rankings':
+                      iconData = Icons.verified;
                       break;
                     default:
                       iconData = Icons.circle;

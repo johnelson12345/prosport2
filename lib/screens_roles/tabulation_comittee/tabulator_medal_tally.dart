@@ -167,50 +167,51 @@ class _TabulatorMedalTallyState extends State<TabulatorMedalTally> {
   }
 
   Future<void> _loadTournaments() async {
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
-    try {
-      QuerySnapshot snapshot = await _firestore
-          .collection('tournaments')
-          .orderBy('createdAt', descending: true)
-          .get();
+  try {
+    QuerySnapshot snapshot = await _firestore
+        .collection('tournaments')
+        .orderBy('createdAt', descending: true)
+        .get();
 
-      List<Map<String, dynamic>> tournaments = [];
+    List<Map<String, dynamic>> tournaments = [];
+    
+    for (var doc in snapshot.docs) {
+      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+      data['id'] = doc.id;
       
-      for (var doc in snapshot.docs) {
-        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        
-        await _fetchCategoryName(data);
-        await _fetchSportName(data);
-        await _fetchOfficialNames(data);
-        await _fetchMedalTeams(data);
-        
-        bool isVerified = data['isVerified'] == true || data['status'] == 'Verified';
-        data['verificationStatus'] = isVerified ? 'Verified' : 'Pending';
-        
-        tournaments.add(data);
-      }
+      await _fetchCategoryName(data);
+      // Get sport name directly from the 'sport' field in the tournament document
+      data['sportName'] = data['sport'] ?? 'N/A';
+      await _fetchOfficialNames(data);
+      await _fetchMedalTeams(data);
+      
+      bool isVerified = data['isVerified'] == true || data['status'] == 'Verified';
+      data['verificationStatus'] = isVerified ? 'Verified' : 'Pending';
+      
+      tournaments.add(data);
+    }
 
-      setState(() {
-        _tournaments = tournaments;
-        _filteredTournaments = List.from(tournaments);
-        _updatePaginatedTournaments();
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: buttonColor,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+    setState(() {
+      _tournaments = tournaments;
+      _filteredTournaments = List.from(tournaments);
+      _updatePaginatedTournaments();
+      _isLoading = false;
+    });
+  } catch (e) {
+    setState(() => _isLoading = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: buttonColor,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
+}
 
   Future<void> _fetchCategoryName(Map<String, dynamic> data) async {
     if (data['categoryId'] != null) {
@@ -227,24 +228,6 @@ class _TabulatorMedalTallyState extends State<TabulatorMedalTally> {
       }
     } else {
       data['categoryName'] = data['category'] ?? 'N/A';
-    }
-  }
-
-  Future<void> _fetchSportName(Map<String, dynamic> data) async {
-    if (data['sportsEventId'] != null) {
-      try {
-        DocumentSnapshot sportDoc = await _firestore
-            .collection('sportsEvents')
-            .doc(data['sportsEventId'])
-            .get();
-        if (sportDoc.exists) {
-          data['sportName'] = (sportDoc.data() as Map<String, dynamic>)['name'] ?? 'Unknown';
-        }
-      } catch (e) {
-        data['sportName'] = 'Unknown';
-      }
-    } else {
-      data['sportName'] = data['sport'] ?? 'N/A';
     }
   }
 
@@ -963,8 +946,6 @@ class _TournamentCard extends StatelessWidget {
   }
 }
 
-// ... (previous code until _TournamentDetailsSheet class)
-
 class _TournamentDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> tournament;
   final VoidCallback onMedalAssigned;
@@ -1190,7 +1171,6 @@ class _TournamentDetailsSheet extends StatelessWidget {
   }
 }
 
-// ADD THIS MISSING CLASS HERE:
 class AssignMedalDialog extends StatefulWidget {
   final String tournamentId;
   final String tournamentName;

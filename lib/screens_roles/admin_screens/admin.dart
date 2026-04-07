@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:tabulation_systemv7/roles/user_accounts.dart';
+import 'package:tabulation_systemv7/screens_roles/admin_screens/results_rankings_admin.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/sports/sports_management.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/sports_eventmngmt_list.dart';
 import 'package:tabulation_systemv7/screens_roles/admin_screens/teams/teams_management.dart';
@@ -43,6 +44,7 @@ class _AdminScreenState extends State<AdminScreen>
     'Tournament Mngmt',
     'Scheduling',
     'Matrix View',
+    'Results & Rankings',
     'User Management',
   ];
   List<String> _filteredMenuItems = [];
@@ -166,6 +168,8 @@ class _AdminScreenState extends State<AdminScreen>
         return const AdminTeamScheduleManagementScreen();
       case 'Matrix View':
         return const SchedulesAdmin();
+      case 'Results & Rankings':
+        return const ResultsAndRankingsAdminPage();
 
       case 'Dashboard':
         return const AdminDashboard();
@@ -585,6 +589,9 @@ class _AdminScreenState extends State<AdminScreen>
                       break;
                     case 'Matrix View':
                       iconData = Icons.schedule;
+                      break;
+                    case 'Results & Rankings':
+                      iconData = Icons.leaderboard;
                       break;
                     default:
                       iconData = Icons.circle;
